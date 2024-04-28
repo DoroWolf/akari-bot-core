@@ -33,7 +33,7 @@
 
 你可以参考[此处](./docs/DEPLOY.md)来尝试搭建。
 
-如你想新的模块，可以看看[这里](https://bot.teahouse.team/wiki/%E6%96%B0%E5%BB%BA%E6%A8%A1%E5%9D%97%E6%8C%87%E5%8D%97)。
+如你想开发新的模块，可以看看[这里](https://bot.teahouse.team/wiki/%E6%96%B0%E5%BB%BA%E6%A8%A1%E5%9D%97%E6%8C%87%E5%8D%97)。
 
 若遇到问题，可以通过 [Issue](https://github.com/Teahouse-Studios/akari-bot/issues/new) 或其他方式咨询开发者。
 
