@@ -268,16 +268,3 @@ async def _(msg: Bot.MessageSession):
         await msg.call_api('set_group_leave', group_id=msg.session.target)
     else:
         await msg.finish()
-
-
-token = module('token', base=True, hide=True)
-
-
-@token.command('<code> {{core.help.token}}')
-async def _(msg: Bot.MessageSession, code: str):
-    await msg.finish(jwt.encode({
-        'exp': datetime.utcnow() + timedelta(seconds=60 * 60 * 24 * 7),  # 7 days
-        'iat': datetime.utcnow(),
-        'senderId': msg.target.sender_id,
-        'code': code
-    }, bytes(jwt_secret, 'utf-8'), algorithm='HS256'))
