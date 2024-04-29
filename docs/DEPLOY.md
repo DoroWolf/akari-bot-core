@@ -517,64 +517,6 @@ pip3 install matrix-nio[e2e] ; PIP
 
 `web_render = "http://127.0.0.1:15551"`
 
-#### 模块
-
-##### coin
-
-`coin` 模块需要一些额外的参数才能正常工作。
-
-`coin_limit = 10000` - 一次可投掷的硬币最大个数。
-
-`coin_faceup_rate = 4994` - 硬币正面朝上的概率，按一万分之几计算。
-
-`coin_facedown_rate = 4994` - 硬币反面朝上的概率，按一万分之几计算。
-
-##### dice
-
-`dice` 模块需要一些额外的参数才能正常工作。
-
-`dice_limit = 10000` - 一次可投掷的骰子最大个数。
-
-`dice_roll_limit = 100` - 投掷骰子的最大次数。
-
-`dice_output_count = 50` - 输出时的最大数据量，超过则无法正常显示。
-
-`dice_detail_count= 5` - 多次投掷骰子的总数，超过则不再显示详细信息。
-
-`dice_count_limit = 10` - 骰子表达式最多的项数。
-
-##### maimai
-
-`maimai` 模块基于 [mai-bot](https://github.com/Diving-Fish/mai-bot) 修改而来。此模块需要额外的资源文件才可正常工作。
-
-1. 下载[资源文件](https://www.diving-fish.com/maibot/static.zip)，并于 `assets` 目录下创建一个 `maimai` 文件夹。
-
-2. 解压资源文件，形成以下目录结构：
-
-    ```angular2html
-    assets
-    └─maimai
-        └─static
-            │  adobe_simhei.otf
-            │  aliases.csv
-            │  msyh.ttc
-            │
-            └─mai
-                │...
-    ```
-
-##### secret
-
-此模块下的内容主要用于监测 Minecraft Wiki 注册日志和滥用日志，如无需要可直接删除此模块的文件夹。
-
-##### wolframalpha
-
-`wolframalpha` 模块需要一些额外的参数才能正常工作。
-
-为了达到目的，你需要前往 [Wolfram|Alpha 开发者平台](https://developer.wolframalpha.com/) 注册一个账号并申请一个 Simple API，然后填写以下字段：
-
-`wolfram_alpha_appid =` - Wolfram|Alpha 的 APPID。
-
 #### 其他功能
 
 `base_superuser =` - 设置机器人主超级用户。可用格式为 `QQ|<QQ号>`、`Discord|Client|<ClientID>`、`Telegram|Client|<ClientID>`、`KOOK|User|<UserID>`，可在机器人开启后使用 `~whoami` 命令来查看自身的 ID，机器人启动后将自动标记对象为超级用户。
