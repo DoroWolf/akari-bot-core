@@ -5,7 +5,7 @@
 
 </div>
 
-![GitHub issues](https://img.shields.io/github/issues/Teahouse-Studios/akari-bot) ![GitHub pull requests](https://img.shields.io/github/issues-pr/Teahouse-Studios/akari-bot) ![License](https://img.shields.io/github/license/Teahouse-Studios/akari-bot) ![GitHub tag](https://img.shields.io/github/v/tag/DoroWolf/open-akari-bot?include_prereleases) [![Crowdin](https://badges.crowdin.net/akari-bot/localized.svg)](https://crowdin.com/project/akari-bot) ![GitHub Repo stars](https://img.shields.io/github/stars/DoroWolf/open-akari-bot?style=social)
+![GitHub issues](https://img.shields.io/github/issues/Teahouse-Studios/akari-bot) ![GitHub pull requests](https://img.shields.io/github/issues-pr/Teahouse-Studios/akari-bot) ![License](https://img.shields.io/github/license/DoroWolf/open-akari-bot) ![GitHub tag](https://img.shields.io/github/v/tag/Teahouse-Studios/akari-bot?include_prereleases) [![Crowdin](https://badges.crowdin.net/akari-bot/localized.svg)](https://crowdin.com/project/akari-bot) ![GitHub Repo stars](https://img.shields.io/github/stars/DoroWolf/open-akari-bot?style=social)
 
 ## 介绍
 
