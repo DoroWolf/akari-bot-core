@@ -397,7 +397,7 @@ pip install -r requirements.txt
 
 为了达到目的，你需要于 [Discord 开发者平台](https://discord.com/developers)创建一个机器人并获取 Token。
 
-`dc_token =` - 填写你获取到的机器人 Token。
+`discord_token =` - 填写你获取到的机器人 Token。
 
 #### Telegram
 
@@ -405,7 +405,7 @@ pip install -r requirements.txt
 
 为了达到目的，你需要在 Telegram 搜索 `@BotFather` 来创建机器人。
 
-`tg_token =` - 填写你获取到的机器人 Token。
+`telegram_token =` - 填写你获取到的机器人 Token。
 
 #### KOOK
 
@@ -467,9 +467,9 @@ pip3 install matrix-nio[e2e] ; PIP
 
 另请注意，由于阿里云政策限制，内容安全服务**不面向个人开发者**，若账号未完成阿里云企业认证，即使生成 AccessKey 也不会调用相关接口。
 
-`check_accessKeyId =` - 填写获取的 AccessKeyID。
+`check_access_key_id =` - 填写获取的 AccessKeyID。
 
-`check_accessKeySecret =` - 填写获取的 AccessKeySecret。
+`check_access_key_secret =` - 填写获取的 AccessKeySecret。
 
 #### QQ 频道消息处理（Beta）
 
@@ -516,6 +516,64 @@ pip3 install matrix-nio[e2e] ; PIP
 **示例**
 
 `web_render = "http://127.0.0.1:15551"`
+
+#### 模块
+
+##### coin
+
+`coin` 模块需要一些额外的参数才能正常工作。
+
+`coin_limit = 10000` - 一次可投掷的硬币最大个数。
+
+`coin_faceup_rate = 4994` - 硬币正面朝上的概率，按一万分之几计算。
+
+`coin_facedown_rate = 4994` - 硬币反面朝上的概率，按一万分之几计算。
+
+##### dice
+
+`dice` 模块需要一些额外的参数才能正常工作。
+
+`dice_limit = 10000` - 一次可投掷的骰子最大个数。
+
+`dice_roll_limit = 100` - 投掷骰子的最大次数。
+
+`dice_output_count = 50` - 输出时的最大数据量，超过则无法正常显示。
+
+`dice_detail_count= 5` - 多次投掷骰子的总数，超过则不再显示详细信息。
+
+`dice_count_limit = 10` - 骰子表达式最多的项数。
+
+##### maimai
+
+`maimai` 模块基于 [mai-bot](https://github.com/Diving-Fish/mai-bot) 修改而来。此模块需要额外的资源文件才可正常工作。
+
+1. 下载[资源文件](https://www.diving-fish.com/maibot/static.zip)，并于 `assets` 目录下创建一个 `maimai` 文件夹。
+
+2. 解压资源文件，形成以下目录结构：
+
+    ```angular2html
+    assets
+    └─maimai
+        └─static
+            │  adobe_simhei.otf
+            │  aliases.csv
+            │  msyh.ttc
+            │
+            └─mai
+                │...
+    ```
+
+##### secret
+
+此模块下的内容主要用于监测 Minecraft Wiki 注册日志和滥用日志，如无需要可直接删除此模块的文件夹。
+
+##### wolframalpha
+
+`wolframalpha` 模块需要一些额外的参数才能正常工作。
+
+为了达到目的，你需要前往 [Wolfram|Alpha 开发者平台](https://developer.wolframalpha.com/) 注册一个账号并申请一个 Simple API，然后填写以下字段：
+
+`wolfram_alpha_appid =` - Wolfram|Alpha 的 APPID。
 
 #### 其他功能
 

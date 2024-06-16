@@ -1,7 +1,6 @@
 import platform
-from datetime import datetime, timedelta
+from datetime import datetime
 
-import jwt
 import psutil
 from cpuinfo import get_cpu_info
 
@@ -15,7 +14,7 @@ from database import BotDBUtil
 
 import subprocess
 
-jwt_secret = Config('jwt_secret', cfg_type = str)
+jwt_secret = Config('jwt_secret', cfg_type=str)
 
 ver = module('version', base=True)
 
@@ -65,7 +64,7 @@ async def _(msg: Bot.MessageSession):
                                       disk_space=disk,
                                       disk_space_total=disk_total)
     else:
-        disk_percent =psutil.disk_usage('/').percent
+        disk_percent = psutil.disk_usage('/').percent
         result += '\n' + msg.locale.t("core.message.ping.simple",
                                       bot_running_time=timediff,
                                       disk_percent=disk_percent)
@@ -148,8 +147,8 @@ async def _(msg: Bot.MessageSession):
     res = msg.locale.t("core.message.locale", lang=msg.locale.t("language")) + '\n' + \
         msg.locale.t("core.message.locale.set.prompt", prefix=msg.prefixes[0]) + '\n' + \
         msg.locale.t("core.message.locale.langlist", langlist=avaliable_lang)
-    if Config('locale_url', cfg_type = str):
-        res += '\n' + msg.locale.t("core.message.locale.contribute", url=Config('locale_url', cfg_type = str))
+    if Config('locale_url', cfg_type=str):
+        res += '\n' + msg.locale.t("core.message.locale.contribute", url=Config('locale_url', cfg_type=str))
     await msg.finish(res)
 
 

@@ -4,6 +4,9 @@ import re
 import traceback
 from datetime import datetime
 
+from aiocqhttp import NetworkError
+from tenacity import RetryError
+
 from config import Config
 from core.builtins import command_prefix, ExecutionLockList, ErrorMessage, MessageTaskManager, Url, Bot, \
     base_superuser_list
@@ -50,7 +53,8 @@ async def tos_abuse_warning(msg: Bot.MessageSession, e):
         temp_ban_counter[msg.target.sender_id] = {'count': 1,
                                                   'ts': datetime.now().timestamp()}
     else:
-        await msg.send_message(msg.locale.t("error.prompt.noreport", detail=e))
+        reason = msg.locale.tl_str(str(e))
+        await msg.send_message(msg.locale.t("error.prompt.noreport", detail=reason))
 
 
 async def tos_msg_counter(msg: Bot.MessageSession, command: str):
@@ -62,7 +66,7 @@ async def tos_msg_counter(msg: Bot.MessageSession, command: str):
     else:
         same['count'] += 1
         if same['count'] > 10:
-            raise AbuseWarning(msg.locale.t("tos.message.reason.cooldown"))
+            raise AbuseWarning("{tos.message.reason.cooldown}")
     all_ = counter_all.get(msg.target.sender_id)
     if not all_ or datetime.now().timestamp() - all_['ts'] > 300:  # 检查是否滥用（5分钟内使用20条命令）
         counter_all[msg.target.sender_id] = {'count': 1,
@@ -70,7 +74,7 @@ async def tos_msg_counter(msg: Bot.MessageSession, command: str):
     else:
         all_['count'] += 1
         if all_['count'] > 20:
-            raise AbuseWarning(msg.locale.t("tos.message.reason.abuse"))
+            raise AbuseWarning("{tos.message.reason.abuse}")
 
 
 async def temp_ban_check(msg: Bot.MessageSession):
@@ -88,7 +92,7 @@ async def temp_ban_check(msg: Bot.MessageSession):
                 is_temp_banned['count'] += 1
                 await msg.finish(msg.locale.t("tos.message.tempbanned.warning", ban_time=int(TOS_TEMPBAN_TIME - ban_time)))
             else:
-                raise AbuseWarning(msg.locale.t("tos.message.reason.ignore"))
+                raise AbuseWarning("{tos.message.reason.ignore}")
 
 
 async def check_target_cooldown(msg: Bot.MessageSession):
@@ -102,7 +106,8 @@ async def check_target_cooldown(msg: Bot.MessageSession):
         if cooldown_counter.get(msg.target.target_id, {}).get(msg.target.sender_id) is not None:
             time = int(datetime.now().timestamp() - cooldown_counter[msg.target.target_id][msg.target.sender_id]['ts'])
             if time > cooldown_time:
-                cooldown_counter[msg.target.target_id].update({msg.target.sender_id: {'ts': datetime.now().timestamp()}})
+                cooldown_counter[msg.target.target_id].update(
+                    {msg.target.sender_id: {'ts': datetime.now().timestamp()}})
             else:
                 await msg.finish(msg.locale.t('message.cooldown', time=cooldown_time - time))
         else:
@@ -119,7 +124,8 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
     :param running_mention: 消息内若包含机器人名称，则检查是否有命令正在运行
     :return: 无返回
     """
-    identify_str = f'[{msg.target.sender_id}{f" ({msg.target.target_id})" if msg.target.target_from != msg.target.sender_from else ""}]'
+    identify_str = f'[{msg.target.sender_id}{
+        f" ({msg.target.target_id})" if msg.target.target_from != msg.target.sender_from else ""}]'
     limited_action = 'touch' if Config('use_shamrock', False) else 'poke'
     # Logger.info(f'{identify_str} -> [Bot]: {display}')
     try:
@@ -146,7 +152,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
         get_custom_prefix = msg.options.get('command_prefix')  # 获取自定义命令前缀
         if get_custom_prefix:
             msg.prefixes = get_custom_prefix + msg.prefixes  # 混合
-        msg.prefixes = [px for px in set(msg.prefixes) if px.strip()] # 过滤重复与空白前缀
+        msg.prefixes = [i for i in set(msg.prefixes) if i.strip()]  # 过滤重复与空白前缀
 
         disable_prefix = False
         if prefix:  # 如果上游指定了命令前缀，则使用指定的命令前缀
@@ -180,7 +186,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
             if not ExecutionLockList.check(msg):  # 加锁
                 ExecutionLockList.add(msg)
             else:
-                return await msg.send_message(msg.locale.t("parser.command.running.prompt"))
+                await msg.send_message(msg.locale.t("parser.command.running.prompt"))
 
             not_alias = False
             for moduleName in modules:
@@ -364,7 +370,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                 except SendMessageFailed:
                     if msg.target.target_from == 'QQ|Group':
                         await msg.call_api('send_group_msg', group_id=msg.session.target,
-                                           message=f'[CQ:{limited_action},qq={int(Config("qq_account", cfg_type = (str, int)))}]')
+                                           message=f'[CQ:{limited_action},qq={int(Config("qq_account", cfg_type=(str, int)))}]')
                     await msg.send_message(msg.locale.t("error.message.limited"))
 
                 except FinishedException as e:
@@ -376,32 +382,41 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                             try:
                                 await tos_msg_counter(msg, msg.trigger_msg)
                             except AbuseWarning as e:
-                                await tos_abuse_warning(msg, e)
+                                await tos_abuse_warning(msg, str(e))
                         else:
                             Logger.debug(f'Tos is disabled, check the configuration if it is not work as expected.')
                     if enable_analytics:
                         BotDBUtil.Analytics(msg).add(msg.trigger_msg, command_first_word, 'normal')
 
                 except AbuseWarning as e:
-                    await tos_abuse_warning(msg, e)
+                    await tos_abuse_warning(msg, str(e))
 
                 except NoReportException as e:
                     Logger.error(traceback.format_exc())
                     err_msg = msg.locale.tl_str(str(e))
                     await msg.send_message(msg.locale.t("error.prompt.noreport", detail=err_msg))
 
+                except (asyncio.exceptions.TimeoutError, RetryError, NetworkError) as e:
+                    Logger.error(traceback.format_exc())
+                    errmsg = msg.locale.t('error.prompt.timeout', detail=str(e))
+                    if Config('bug_report_url', cfg_type=str):
+                        errmsg += '\n' + msg.locale.t('error.prompt.address',
+                                                      url=str(Url(Config('bug_report_url', cfg_type=str))))
+                    await msg.send_message(errmsg)
+
                 except Exception as e:
                     tb = traceback.format_exc()
                     Logger.error(tb)
-                    errmsg = msg.locale.t('error.prompt', detail=str(e))
-                    if Config('bug_report_url', cfg_type = str):
-                        errmsg += '\n' + msg.locale.t('error.prompt.address', url=str(Url(Config('bug_report_url', cfg_type = str))))
+                    errmsg = msg.locale.t('error.prompt.report', detail=str(e))
+                    if Config('bug_report_url', cfg_type=str):
+                        errmsg += '\n' + msg.locale.t('error.prompt.address',
+                                                      url=str(Url(Config('bug_report_url', cfg_type=str))))
                     await msg.send_message(errmsg)
                     if report_targets:
                         for target in report_targets:
                             if f := await Bot.FetchTarget.fetch_target(target):
                                 await f.send_direct_message(
-                                    Locale(default_locale).t('error.message.report', module=msg.trigger_msg) + tb, disable_secret_check=True)
+                                    Locale(default_locale).t('error.message.report', module=msg.trigger_msg, detail=tb), disable_secret_check=True)
             if command_first_word in current_unloaded_modules:
                 await msg.send_message(
                     msg.locale.t('parser.module.unloaded', module=command_first_word))
@@ -490,7 +505,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                                 try:
                                     await tos_msg_counter(msg, msg.trigger_msg)
                                 except AbuseWarning as e:
-                                    await tos_abuse_warning(msg, e)
+                                    await tos_abuse_warning(msg, str(e))
                             else:
                                 Logger.debug(f'Tos is disabled, check the configuration if it is not work as expected.')
 
@@ -502,28 +517,36 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                             await msg.send_message(msg.locale.t("error.prompt.noreport", detail=err_msg))
 
                         except AbuseWarning as e:
-                            await tos_abuse_warning(msg, e)
+                            await tos_abuse_warning(msg, str(e))\
+
+                        except (asyncio.exceptions.TimeoutError, RetryError, NetworkError) as e:
+                            Logger.error(traceback.format_exc())
+                            errmsg = msg.locale.t('error.prompt.timeout', detail=str(e))
+                            if Config('bug_report_url', cfg_type=str):
+                                errmsg += '\n' + msg.locale.t('error.prompt.address',
+                                                              url=str(Url(Config('bug_report_url', cfg_type=str))))
+                            await msg.send_message(errmsg)
 
                         except Exception as e:
                             tb = traceback.format_exc()
                             Logger.error(tb)
-                            errmsg = msg.locale.t('error.prompt', detail=str(e))
-                            if Config('bug_report_url', cfg_type = str):
+                            errmsg = msg.locale.t('error.prompt.report', detail=str(e))
+                            if Config('bug_report_url', cfg_type=str):
                                 errmsg += '\n' + msg.locale.t('error.prompt.address',
-                                                              url=str(Url(Config('bug_report_url', cfg_type = str))))
+                                                              url=str(Url(Config('bug_report_url', cfg_type=str))))
                             await msg.send_message(errmsg)
                             if report_targets:
                                 for target in report_targets:
                                     if f := await Bot.FetchTarget.fetch_target(target):
                                         await f.send_direct_message(
-                                            Locale(default_locale).t('error.message.report', module=msg.trigger_msg) + tb, disable_secret_check=True)
+                                            Locale(default_locale).t('error.message.report', module=msg.trigger_msg, detail=tb), disable_secret_check=True)
                         finally:
                             ExecutionLockList.remove(msg)
 
             except SendMessageFailed:
                 if msg.target.target_from == 'QQ|Group':
                     await msg.call_api('send_group_msg', group_id=msg.session.target,
-                                       message=f'[CQ:{limited_action},qq={int(Config("qq_account", cfg_type = (int, str)))}]')
+                                       message=f'[CQ:{limited_action},qq={int(Config("qq_account", cfg_type=(int, str)))}]')
                 await msg.send_message((msg.locale.t("error.message.limited")))
                 continue
         return msg
