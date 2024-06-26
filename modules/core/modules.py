@@ -6,6 +6,7 @@ from core.builtins import Image, Plain, Bot
 from core.component import module
 from core.exceptions import InvalidHelpDocTypeError
 from core.loader import ModulesManager, current_unloaded_modules, err_modules
+from core.logger import Logger
 from core.parser.command import CommandParser
 from core.utils.i18n import load_locale_file
 from core.utils.image_table import ImageTable, image_table_render
@@ -353,7 +354,11 @@ async def bot_help(msg: Bot.MessageSession):
                 devs_msg = '\n' + msg.locale.t("core.message.help.author.type1") + devs
             else:
                 devs_msg = ''
-            if Config('help_url', cfg_type=str):
+            if Config('help_page_url', cfg_type=str):
+                wiki_msg = '\n' + msg.locale.t("core.message.help.helpdoc.address",
+                                               url=Config('help_page_url', cfg_type=str).replace('${module}', help_name))
+
+            elif Config('help_url', cfg_type=str):
                 wiki_msg = '\n' + msg.locale.t("core.message.help.helpdoc.address",
                                                url=Config('help_url', cfg_type=str)) + '/' + help_name
             else:
@@ -369,7 +374,7 @@ async def bot_help(msg: Bot.MessageSession):
                         await msg.finish([Image(render),
                                           Plain(wiki_msg)])
                 except Exception:
-                    traceback.print_exc()
+                    Logger.error(traceback.format_exc())
             if malias:
                 doc += f'\n{msg.locale.t("core.help.alias")}\n' + '\n'.join(malias)
             doc_msg = (doc + devs_msg + wiki_msg).lstrip()
@@ -460,7 +465,7 @@ async def _(msg: Bot.MessageSession):
                                                                 url=Config('donate_url', cfg_type=str))))
                     await msg.finish(help_msg_list)
         except Exception:
-            traceback.print_exc()
+            Logger.error(traceback.format_exc())
     if legacy_help:
         help_msg = [msg.locale.t("core.message.help.legacy.base")]
         essential = []
@@ -558,7 +563,7 @@ async def modules_help(msg: Bot.MessageSession, legacy):
                     legacy_help = False
                     await msg.finish([Image(render), Plain('\n'.join(help_msg))])
         except Exception:
-            traceback.print_exc()
+            Logger.error(traceback.format_exc())
     if legacy_help:
         module_ = []
         for x in module_list:
