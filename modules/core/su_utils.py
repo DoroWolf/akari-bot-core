@@ -7,7 +7,7 @@ from datetime import datetime
 import ujson as json
 
 from config import Config, CFG
-from core.builtins import Bot, PrivateAssets, Plain, ExecutionLockList, Temp, MessageTaskManager
+from core.builtins import Bot, I18NContext, PrivateAssets, Plain, ExecutionLockList, Temp, MessageTaskManager
 from core.component import module
 from core.exceptions import NoReportException, TestException
 from core.loader import ModulesManager
@@ -16,16 +16,17 @@ from core.parser.message import check_temp_ban, remove_temp_ban
 from core.tos import pardon_user, warn_user
 from core.utils.info import Info
 from core.utils.storedata import get_stored_list, update_stored_list
+from core.utils.text import isfloat, isint
 from database import BotDBUtil
 
 
 target_list = ["Discord|Channel", "Discord|DM|Channel", "KOOK|Group",
                "Matrix|Room", "QQ|Group", "QQ|Guild", "QQ|Private", "Telegram|Channel",
-               "Telegram|Group", "Telegram|Private", "Telegram|Supergroup",]
-sender_list = ["Discord|Client", "KOOK|User", "Matrix", "QQ", "QQ|Tiny", "Telegram|User",]
+               "Telegram|Group", "Telegram|Private", "Telegram|Supergroup", "TEST|Console",]
+sender_list = ["Discord|Client", "KOOK|User", "Matrix", "QQ", "QQ|Tiny", "Telegram|User", "TEST",]
 
 
-su = module('superuser', alias='su', required_superuser=True, base=True)
+su = module('superuser', alias='su', required_superuser=True, base=True, doc=True)
 
 
 @su.command('add <user>')
@@ -50,7 +51,7 @@ async def del_su(msg: Bot.MessageSession, user: str):
             await msg.finish(msg.locale.t("success"))
 
 
-purge = module('purge', required_superuser=True, base=True)
+purge = module('purge', required_superuser=True, base=True, doc=True)
 
 
 @purge.command()
@@ -68,7 +69,7 @@ async def _(msg: Bot.MessageSession):
         await msg.finish(msg.locale.t("core.message.purge.empty"))
 
 
-set_ = module('set', required_superuser=True, base=True)
+set_ = module('set', required_superuser=True, base=True, doc=True)
 
 
 @set_.command('module enable <target> <modules> ...',
@@ -101,7 +102,7 @@ async def _(msg: Bot.MessageSession, target: str):
     elif 'list' in msg.parsed_msg:
         modules = sorted(target_data.enabled_modules)
         if modules:
-            await msg.finish([Plain(msg.locale.t("core.message.set.module.list")), Plain(" | ".join(modules))])
+            await msg.finish([I18NContext("core.message.set.module.list"), Plain(" | ".join(modules))])
         else:
             await msg.finish(msg.locale.t("core.message.set.module.list.none"))
 
@@ -123,11 +124,15 @@ async def _(msg: Bot.MessageSession, target: str):
     elif 'edit' in msg.parsed_msg:
         k = msg.parsed_msg.get('<k>')
         v = msg.parsed_msg.get('<v>')
-        if v.startswith(('[', '{')):
-            v = json.loads(v)
-        elif v.upper() == 'TRUE':
+        if re.match(r'\[.*\]|\{.*\}', v):
+            try:
+                v = v.replace('\'', '\"')
+                v = json.loads(v)
+            except json.JSONDecodeError:
+                await msg.finish(msg.locale.t("core.message.config.write.failed"))
+        elif v.lower() == 'true':
             v = True
-        elif v.upper() == 'FALSE':
+        elif v.lower() == 'false':
             v = False
         target_data.edit_option(k, v)
         await msg.finish(msg.locale.t("core.message.set.option.edit.success", k=k, v=v))
@@ -138,7 +143,7 @@ async def _(msg: Bot.MessageSession, target: str):
 
 
 if Bot.client_name == 'QQ':
-    post_whitelist = module('post_whitelist', required_superuser=True, base=True)
+    post_whitelist = module('post_whitelist', required_superuser=True, base=True, doc=True)
 
     @post_whitelist.command('<group_id>')
     async def _(msg: Bot.MessageSession, group_id: str):
@@ -151,7 +156,7 @@ if Bot.client_name == 'QQ':
         await msg.finish(msg.locale.t("core.message.set.option.edit.success", k=k, v=v))
 
 
-ae = module('abuse', alias='ae', required_superuser=True, base=True)
+ae = module('abuse', alias='ae', required_superuser=True, base=True, doc=True)
 
 
 @ae.command('check <user>')
@@ -235,23 +240,7 @@ if Bot.client_name == 'QQ':
             await msg.finish(msg.locale.t("core.message.abuse.unblock.success", target=target))
 
 
-res = module('reset', required_superuser=True, base=True)
-
-
-@res.command()
-async def reset(msg: Bot.MessageSession):
-    confirm = await msg.wait_confirm(msg.locale.t("core.message.confirm"), append_instruction=False)
-    if confirm:
-        pull_repo_result = os.popen('git reset --hard origin/master', 'r').read()[:-1]
-        if pull_repo_result != '':
-            await msg.finish(pull_repo_result)
-        else:
-            await msg.finish(msg.locale.t("core.message.update.failed"))
-    else:
-        await msg.finish()
-
-
-upd = module('update', required_superuser=True, base=True)
+upd = module('update', required_superuser=True, base=True, doc=True)
 
 
 def pull_repo():
@@ -273,16 +262,18 @@ def update_dependencies():
 
 @upd.command()
 async def update_bot(msg: Bot.MessageSession):
-    pull_repo_result = pull_repo()
-    if pull_repo_result:
-        await msg.send_message(pull_repo_result)
-    else:
-        await msg.send_message(msg.locale.t("core.message.update.failed"))
+    if Info.version:
+        pull_repo_result = pull_repo()
+        if pull_repo_result:
+            await msg.send_message(pull_repo_result)
+        else:
+            Logger.warning(f'Failed to get Git repository result.')
+            await msg.send_message(msg.locale.t("core.message.update.failed"))
     await msg.finish(update_dependencies())
 
 
 if Info.subprocess:
-    rst = module('restart', required_superuser=True, base=True)
+    rst = module('restart', required_superuser=True, base=True, doc=True)
 
     def restart():
         sys.exit(233)
@@ -325,7 +316,7 @@ if Info.subprocess:
         else:
             await msg.finish()
 
-    upds = module('update&restart', required_superuser=True, alias='u&r', base=True)
+    upds = module('update&restart', required_superuser=True, alias='u&r', base=True, doc=True)
 
     @upds.command()
     async def update_and_restart_bot(msg: Bot.MessageSession):
@@ -334,19 +325,20 @@ if Info.subprocess:
             restart_time.append(datetime.now().timestamp())
             await wait_for_restart(msg)
             write_version_cache(msg)
-            pull_repo_result = pull_repo()
-            if pull_repo_result != '':
-                await msg.send_message(pull_repo_result)
-                await msg.send_message(update_dependencies())
-            else:
-                Logger.warn(f'Failed to get Git repository result.')
-                await msg.send_message(msg.locale.t("core.message.update.failed"))
+            if Info.version:
+                pull_repo_result = pull_repo()
+                if pull_repo_result != '':
+                    await msg.send_message(pull_repo_result)
+                else:
+                    Logger.warning(f'Failed to get Git repository result.')
+                    await msg.send_message(msg.locale.t("core.message.update.failed"))
+            await msg.send_message(update_dependencies())
             restart()
         else:
             await msg.finish()
 
 
-exit_ = module('exit', required_superuser=True, base=True, available_for=['TEST|Console'])
+exit_ = module('exit', required_superuser=True, base=True, doc=True, available_for=['TEST|Console'])
 
 
 @exit_.command()
@@ -358,7 +350,7 @@ async def _(msg: Bot.MessageSession):
 
 
 if Bot.FetchTarget.name == 'QQ':
-    resume = module('resume', required_base_superuser=True, base=True)
+    resume = module('resume', required_base_superuser=True, base=True, doc=True)
 
     @resume.command()
     async def resume_sending_group_message(msg: Bot.MessageSession):
@@ -402,7 +394,7 @@ if Bot.FetchTarget.name == 'QQ':
         Temp.data['waiting_for_send_group_message'] = []
         await msg.finish(msg.locale.t("core.message.resume.clear"))
 
-    forward_msg = module('forward_msg', required_superuser=True, base=True)
+    forward_msg = module('forward_msg', required_superuser=True, base=True, doc=True)
 
     @forward_msg.command()
     async def _(msg: Bot.MessageSession):
@@ -417,7 +409,7 @@ if Bot.FetchTarget.name == 'QQ':
             await msg.finish(msg.locale.t('core.message.forward_msg.disable'))
 
 
-echo = module('echo', required_superuser=True, base=True)
+echo = module('echo', required_superuser=True, base=True, doc=True)
 
 
 @echo.command('<display_msg>')
@@ -425,7 +417,7 @@ async def _(msg: Bot.MessageSession, display_msg: str):
     await msg.finish(display_msg)
 
 
-say = module('say', required_superuser=True, base=True)
+say = module('say', required_superuser=True, base=True, doc=True)
 
 
 @say.command('<display_msg>')
@@ -433,7 +425,7 @@ async def _(msg: Bot.MessageSession, display_msg: str):
     await msg.finish(display_msg, quote=False)
 
 
-rse = module('raise', required_superuser=True, base=True)
+rse = module('raise', required_superuser=True, base=True, doc=True)
 
 
 @rse.command()
@@ -443,7 +435,7 @@ async def _(msg: Bot.MessageSession):
 
 
 if Config('enable_eval', False):
-    _eval = module('eval', required_superuser=True, base=True)
+    _eval = module('eval', required_superuser=True, base=True, doc=True)
 
     @_eval.command('<display_msg>')
     async def _(msg: Bot.MessageSession, display_msg: str):
@@ -453,23 +445,7 @@ if Config('enable_eval', False):
             raise NoReportException(e)
 
 
-cfg_ = module('config', required_superuser=True, alias='cfg', base=True)
-
-
-def isfloat(num):
-    try:
-        float(num)
-        return True
-    except ValueError:
-        return False
-
-
-def isint(num):
-    try:
-        int(num)
-        return True
-    except ValueError:
-        return False
+cfg_ = module('config', required_superuser=True, alias='cfg', base=True, doc=True)
 
 
 @cfg_.command('get <k>')
@@ -487,10 +463,11 @@ async def _(msg: Bot.MessageSession, k: str, v: str):
         v = int(v)
     elif isfloat(v):
         v = float(v)
-    elif re.match(r'^\[.*\]$', v):
+    elif re.match(r'\[.*\]', v):
         try:
+            v = v.replace('\'', '\"')
             v = json.loads(v)
-        except BaseException:
+        except json.JSONDecodeError:
             await msg.finish(msg.locale.t("core.message.config.write.failed"))
 
     CFG.write(k, v, msg.parsed_msg['-s'])
@@ -506,11 +483,11 @@ async def _(msg: Bot.MessageSession, k: str):
 
 
 if Config('enable_petal', False):
-    petal = module('petal', base=True, alias='petals')
+    petal = module('petal', alias='petals', base=True, doc=True)
 
     @petal.command()
     async def _(msg: Bot.MessageSession):
-        await msg.finish(msg.locale.t('core.message.petal.self', petal=msg.data.petal))
+        await msg.finish(msg.locale.t('core.message.petal.self', petal=msg.petal))
 
     @petal.command('[<target>] {{core.help.petal}}', required_superuser=True)
     async def _(msg: Bot.MessageSession):
@@ -532,7 +509,7 @@ if Config('enable_petal', False):
                 msg.locale.t('core.message.petal.modify', target=target, add_petal=petal, petal=target_info.petal))
         else:
             msg.data.modify_petal(int(petal))
-            await msg.finish(msg.locale.t('core.message.petal.modify.self', add_petal=petal, petal=msg.data.petal))
+            await msg.finish(msg.locale.t('core.message.petal.modify.self', add_petal=petal, petal=msg.petal))
 
     @petal.command('clear [<target>]', required_superuser=True)
     async def _(msg: Bot.MessageSession):

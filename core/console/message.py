@@ -2,10 +2,10 @@ import asyncio
 from typing import List, Union
 
 from inputimeout import inputimeout, TimeoutOccurred
-from PIL import Image
+from PIL import Image as PImage
 
 from config import Config
-from core.builtins import (Plain, Image as BImage, confirm_command, Bot, FetchTarget as FetchTargetT,
+from core.builtins import (Plain, I18NContext, Image, confirm_command, Bot, FetchTarget as FetchTargetT,
                            FetchedSession as FetchedSessionT)
 from core.builtins.message import MessageSession as MessageSessionT
 from core.builtins.message.chain import MessageChain
@@ -36,15 +36,13 @@ class MessageSession(MessageSessionT):
                            allow_split_image=True, callback=None) -> FinishedSession:
         message_chain = MessageChain(message_chain)
         self.sent.append(message_chain)
-        msg_list = []
         for x in message_chain.as_sendable(self, embed=False):
             if isinstance(x, Plain):
-                msg_list.append(x.text)
                 print(x.text)
                 Logger.info(f'[Bot] -> [{self.target.target_id}]: {x.text}')
-            if isinstance(x, BImage):
+            elif isinstance(x, Image):
                 image_path = await x.get()
-                img = Image.open(image_path)
+                img = PImage.open(image_path)
                 img.show()
                 Logger.info(f'[Bot] -> [{self.target.target_id}]: Image: {image_path}')
         return FinishedSession(self, [0], ['Should be a callable here... hmm...'])
@@ -77,7 +75,7 @@ class MessageSession(MessageSessionT):
         send = None
         if message_chain:
             if append_instruction:
-                print(self.locale.t("message.wait.prompt.next_message"))
+                message_chain.append(I18NContext("message.wait.prompt.next_message"))
             send = await self.send_message(message_chain)
         try:
             if timeout:
@@ -97,7 +95,7 @@ class MessageSession(MessageSessionT):
                          all_=False, append_instruction=True):
         message_chain = MessageChain(message_chain)
         if append_instruction:
-            message_chain.append(Plain(self.locale.t("message.reply.prompt")))
+            message_chain.append(I18NContext("message.reply.prompt"))
         send = await self.send_message(message_chain)
         try:
             if timeout:

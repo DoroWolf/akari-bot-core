@@ -2,7 +2,7 @@ import re
 import traceback
 
 from config import Config, CFG
-from core.builtins import Image, Plain, Bot
+from core.builtins import Bot, I18NContext, Image, Plain
 from core.component import module
 from core.exceptions import InvalidHelpDocTypeError
 from core.loader import ModulesManager, current_unloaded_modules, err_modules
@@ -19,6 +19,7 @@ m = module('module',
                   'load': 'module load',
                   'reload': 'module reload',
                   'unload': 'module unload'},
+           doc=True,
            required_admin=True
            )
 
@@ -30,12 +31,13 @@ m = module('module',
             'reload <module> ...',
             'load <module> ...',
             'unload <module> ...',
-            'list [legacy] {{core.help.module.list}}'],
+            'list [--legacy] {{core.help.module.list}}'],
+           options_desc={'--legacy': '{help.option.legacy}'},
            exclude_from=['QQ|Guild'])
 async def _(msg: Bot.MessageSession):
     if msg.parsed_msg.get('list', False):
         legacy = False
-        if msg.parsed_msg.get('legacy', False):
+        if msg.parsed_msg.get('--legacy', False):
             legacy = True
         await modules_help(msg, legacy)
     await config_modules(msg)
@@ -48,13 +50,13 @@ async def _(msg: Bot.MessageSession):
             'reload <module> ...',
             'load <module> ...',
             'unload <module> ...',
-            'list [legacy] {{core.help.module.list}}'],
-           options_desc={'-g': '{core.help.option.module.g}'},
+            'list [--legacy] {{core.help.module.list}}'],
+           options_desc={'-g': '{core.help.option.module.g}', '--legacy': '{help.option.legacy}'},
            available_for=['QQ|Guild'])
 async def _(msg: Bot.MessageSession):
     if msg.parsed_msg.get('list', False):
         legacy = False
-        if msg.parsed_msg.get('legacy', False):
+        if msg.parsed_msg.get('--legacy', False):
             legacy = True
         await modules_help(msg, legacy)
     await config_modules(msg)
@@ -83,7 +85,7 @@ async def config_modules(msg: Bot.MessageSession):
             for function in modules_:
                 if function[0] == '_':
                     continue
-                if modules_[function].base or modules_[function].hide or modules_[function].required_superuser:
+                if modules_[function].base or modules_[function].hidden or modules_[function].required_superuser:
                     continue
                 enable_list.append(function)
         else:
@@ -140,7 +142,7 @@ async def config_modules(msg: Bot.MessageSession):
             for function in modules_:
                 if function[0] == '_':
                     continue
-                if modules_[function].base or modules_[function].hide or modules_[function].required_superuser:
+                if modules_[function].base or modules_[function].hidden or modules_[function].required_superuser:
                     continue
                 disable_list.append(function)
         else:
@@ -298,10 +300,11 @@ async def config_modules(msg: Bot.MessageSession):
         return
 
 
-hlp = module('help', base=True)
+hlp = module('help', base=True, doc=True)
 
 
-@hlp.command('[legacy] <module> {{core.help.help.detail}}')
+@hlp.command('[--legacy] <module> {{core.help.help.detail}}',
+             options_desc={'--legacy': '{help.option.legacy}'})
 async def bot_help(msg: Bot.MessageSession):
     module_list = ModulesManager.return_modules_list(
         target_from=msg.target.target_from)
@@ -310,7 +313,7 @@ async def bot_help(msg: Bot.MessageSession):
         msgs = []
         help_name = msg.parsed_msg['<module>']
         if help_name in alias:
-            help_name = alias[help_name]
+            help_name = alias[help_name].split()[0]
         if help_name in current_unloaded_modules:
             await msg.finish(msg.locale.t("parser.module.unloaded", module=help_name))
         elif help_name in err_modules:
@@ -354,16 +357,15 @@ async def bot_help(msg: Bot.MessageSession):
                 devs_msg = '\n' + msg.locale.t("core.message.help.author.type1") + devs
             else:
                 devs_msg = ''
-            if Config('help_page_url', cfg_type=str):
-                wiki_msg = '\n' + msg.locale.t("core.message.help.helpdoc.address",
-                                               url=Config('help_page_url', cfg_type=str).replace('${module}', help_name))
-
-            elif Config('help_url', cfg_type=str):
-                wiki_msg = '\n' + msg.locale.t("core.message.help.helpdoc.address",
-                                               url=Config('help_url', cfg_type=str)) + '/' + help_name
-            else:
-                wiki_msg = ''
-            if len(doc) > 500 and not msg.parsed_msg.get('legacy', False) and msg.Feature.image:
+            wiki_msg = ''
+            if module_.doc:
+                if Config('help_page_url', cfg_type=str):
+                    wiki_msg = '\n' + msg.locale.t("core.message.help.helpdoc.address",
+                                                   url=Config('help_page_url', cfg_type=str).replace('${module}', help_name))
+                elif Config('help_url', cfg_type=str):
+                    wiki_msg = '\n' + msg.locale.t("core.message.help.helpdoc.address",
+                                                   url=(CFG.get_url('help_url') + help_name))
+            if len(doc) > 500 and not msg.parsed_msg.get('--legacy', False) and msg.Feature.image:
                 try:
                     tables = [ImageTable([[doc, '\n'.join(malias), devs]],
                                          [msg.locale.t("core.message.help.table.header.help"),
@@ -387,7 +389,8 @@ async def bot_help(msg: Bot.MessageSession):
 
 
 @hlp.command()
-@hlp.command('[legacy] {{core.help.help}}')
+@hlp.command('[--legacy] {{core.help.help}}',
+             options_desc={'--legacy': '{help.option.legacy}'})
 async def _(msg: Bot.MessageSession):
     module_list = ModulesManager.return_modules_list(
         target_from=msg.target.target_from)
@@ -435,10 +438,10 @@ async def _(msg: Bot.MessageSession):
                 if module_.developers:
                     appends.append(msg.locale.t('message.delimiter').join(module_.developers))
                 if module_.base and not (
-                        module_.hide or module_.required_superuser or module_.required_base_superuser):
+                        module_.hidden or module_.required_superuser or module_.required_base_superuser):
                     essential.append(appends)
                 if x in target_enabled_list and not (
-                        module_.hide or module_.required_superuser or module_.required_base_superuser):
+                        module_.hidden or module_.required_superuser or module_.required_base_superuser):
                     m.append(appends)
             if essential:
                 tables.append(ImageTable(
@@ -455,14 +458,14 @@ async def _(msg: Bot.MessageSession):
                 render = await image_table_render(tables)
                 if render:
                     legacy_help = False
-                    help_msg_list = [Image(render), Plain(msg.locale.t("core.message.help.more_information",
-                                                                       prefix=msg.prefixes[0]))]
+                    help_msg_list = [Image(render), I18NContext("core.message.help.more_information",
+                                                                prefix=msg.prefixes[0])]
                     if Config('help_url', cfg_type=str):
-                        help_msg_list.append(Plain(msg.locale.t("core.message.help.more_information.document",
-                                                                url=Config('help_url', cfg_type=str))))
+                        help_msg_list.append(I18NContext("core.message.help.more_information.document",
+                                                         url=Config('help_url', cfg_type=str)))
                     if Config('donate_url', cfg_type=str):
-                        help_msg_list.append(Plain(msg.locale.t("core.message.help.more_information.donate",
-                                                                url=Config('donate_url', cfg_type=str))))
+                        help_msg_list.append(I18NContext("core.message.help.more_information.donate",
+                                                         url=Config('donate_url', cfg_type=str)))
                     await msg.finish(help_msg_list)
         except Exception:
             Logger.error(traceback.format_exc())
@@ -471,13 +474,13 @@ async def _(msg: Bot.MessageSession):
         essential = []
         for x in module_list:
             if module_list[x].base and not (
-                    module_list[x].hide or module_list[x].required_superuser or module_list[x].required_base_superuser):
+                    module_list[x].hidden or module_list[x].required_superuser or module_list[x].required_base_superuser):
                 essential.append(module_list[x].bind_prefix)
         help_msg.append(' | '.join(essential))
         module_ = []
         for x in module_list:
             if x in target_enabled_list and not (
-                    module_list[x].hide or module_list[x].required_superuser or module_list[x].required_base_superuser):
+                    module_list[x].hidden or module_list[x].required_superuser or module_list[x].required_base_superuser):
                 module_.append(x)
         if module_:
             help_msg.append(msg.locale.t("core.message.help.legacy.external"))
@@ -516,7 +519,7 @@ async def modules_help(msg: Bot.MessageSession, legacy):
                 module_ = module_list[x]
                 if x[0] == '_':
                     continue
-                if module_.base or module_.hide or module_.required_superuser or module_.required_base_superuser:
+                if module_.base or module_.hidden or module_.required_superuser or module_.required_base_superuser:
                     continue
                 appends = [module_.bind_prefix]
                 doc_ = []
@@ -569,7 +572,7 @@ async def modules_help(msg: Bot.MessageSession, legacy):
         for x in module_list:
             if x[0] == '_':
                 continue
-            if module_list[x].base or module_list[x].hide or \
+            if module_list[x].base or module_list[x].hidden or \
                     module_list[x].required_superuser or module_list[x].required_base_superuser:
                 continue
             module_.append(module_list[x].bind_prefix)

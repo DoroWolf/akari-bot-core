@@ -13,8 +13,9 @@ from aiocqhttp import MessageSegment
 
 from bots.aiocqhttp.client import bot
 from bots.aiocqhttp.info import client_name
+from bots.aiocqhttp.utils import qq_frame_type
 from config import Config
-from core.builtins import Bot, base_superuser_list, command_prefix, ErrorMessage, Image, Plain, Temp, Voice, MessageTaskManager
+from core.builtins import Bot, base_superuser_list, command_prefix, I18NContext, Image, Plain, Temp, Voice, MessageTaskManager
 from core.builtins.message import MessageSession as MessageSessionT
 from core.builtins.message.chain import MessageChain
 from core.exceptions import SendMessageFailed
@@ -94,34 +95,12 @@ class MessageSession(MessageSessionT):
         message_chain = MessageChain(message_chain)
         message_chain_assendable = message_chain.as_sendable(self, embed=False)
 
-        if (self.target.target_from == 'QQ|Group' and Temp.data.get('lagrange_status', False) and not
-                self.tmp.get('enforce_send_by_master_client', False) and not callback):
-            lagrange_available_groups = Temp.data.get('lagrange_available_groups', [])
-            if int(self.session.target) in lagrange_available_groups:
-                choose = random.randint(0, 1)
-                Logger.debug(f'choose: {choose}')
-                if choose:
-                    cant_sends = []
-                    for x in message_chain_assendable:
-                        if isinstance(x, Voice):
-                            cant_sends.append(x)
-                            message_chain_assendable.remove(x)
-                    if message_chain_assendable:
-                        await JobQueue.send_message('Lagrange', self.target.target_id,
-                                                    MessageChain(message_chain_assendable).to_list())
-                        if cant_sends:
-                            self.tmp['enforce_send_by_master_client'] = True
-                            await self.send_message(MessageChain(cant_sends))
-                        return FinishedSession(self, 0, [{}])
-        else:
-            Logger.debug(f'Do not use lagrange since some conditions are not met.\n{self.target.target_from} '
-                         f'{self.tmp.get("enforce_send_by_master_client", False)}')
         msg = MessageSegment.text('')
         if quote and self.target.target_from == 'QQ|Group' and self.session.message:
             msg = MessageSegment.reply(self.session.message.message_id)
 
         if not message_chain.is_safe and not disable_secret_check:
-            return await self.send_message(Plain(ErrorMessage(self.locale.t("error.message.chain.unsafe"))))
+            return await self.send_message(I18NContext("error.message.chain.unsafe"))
         self.sent.append(message_chain)
         count = 0
         for x in message_chain_assendable:
@@ -142,22 +121,12 @@ class MessageSession(MessageSessionT):
                     self.locale.t("error.message.timeout")))
             except aiocqhttp.exceptions.ActionFailed:
                 img_chain = message_chain.copy()
-                img_chain.insert(0, Plain(self.locale.t("error.message.limited.msg2img")))
+                img_chain.insert(0, I18NContext("error.message.limited.msg2img"))
                 msg2img = MessageSegment.image(Path(await msgchain2image(img_chain, self)).as_uri())
                 try:
                     send = await bot.send_group_msg(group_id=self.session.target, message=msg2img)
                 except aiocqhttp.exceptions.ActionFailed as e:
-                    if (self.target.target_from == 'QQ|Group' and Temp.data.get('lagrange_status', False) and not
-                            self.tmp.get('enforce_send_by_master_client', False)):
-                        lagrange_available_groups = Temp.data.get('lagrange_available_groups', [])
-                        if self.session.target in lagrange_available_groups:
-                            await JobQueue.send_message('Lagrange', self.target.target_id,
-                                                        message_chain.to_list())
-                            return FinishedSession(self, 0, [{}])
-                        else:
-                            raise SendMessageFailed(e.result['wording'])
-                    else:
-                        raise SendMessageFailed(e.result['wording'])
+                    raise SendMessageFailed(e.result['wording'])
 
             if Temp.data['is_group_message_blocked']:
                 asyncio.create_task(resending_group_message())
@@ -254,8 +223,18 @@ class MessageSession(MessageSessionT):
                 if s.startswith('[CQ:image'):
                     sspl = s.split(',')
                     for ss in sspl:
-                        if ss.startswith('url='):
-                            lst.append(Image(ss[4:-1]))
+                        if qq_frame_type() == 'lagrange':
+                            if ss.startswith('file='):
+                                ss = ss[5:]
+                                if ss.endswith(']'):
+                                    ss = ss[:-1]
+                                lst.append(Image(ss))
+                        else:
+                            if ss.startswith('url='):
+                                ss = ss[4:]
+                                if ss.endswith(']'):
+                                    ss = ss[:-1]
+                                lst.append(Image(ss))
             else:
                 lst.append(Plain(s))
 
@@ -274,14 +253,25 @@ class MessageSession(MessageSessionT):
             self.msg = msg
 
         async def __aenter__(self):
-            if self.msg.target.target_from == 'QQ|Group':
-                if self.msg.session.sender in last_send_typing_time:
-                    if datetime.datetime.now().timestamp() - last_send_typing_time[self.msg.session.sender] <= 3600:
-                        return
-                last_send_typing_time[self.msg.session.sender] = datetime.datetime.now().timestamp()
-                action = 'touch' if Config('use_shamrock', False) else 'poke'
-                await bot.send_group_msg(group_id=self.msg.session.target,
-                                         message=f'[CQ:{action},qq={self.msg.session.sender}]')
+            if self.msg.target.target_from == 'QQ|Group':  # wtf onebot 11
+                if qq_frame_type() == 'ntqq':
+                    await bot.call_action('set_msg_emoji_like', message_id=self.msg.session.message.message_id,
+                                          emoji_id=str(Config('qq_typing_emoji', '181', (str, int))))
+                else:
+                    if self.msg.session.sender in last_send_typing_time:
+                        if datetime.datetime.now().timestamp() - last_send_typing_time[self.msg.session.sender] <= 3600:
+                            return
+                    last_send_typing_time[self.msg.session.sender] = datetime.datetime.now().timestamp()
+
+                    if qq_frame_type() == 'lagrange':
+                        await bot.call_action('group_poke', group_id=self.msg.session.target,
+                                              user_id=self.msg.session.sender)
+                    elif qq_frame_type() == 'shamrock':
+                        await bot.send_group_msg(group_id=self.msg.session.target,
+                                                 message=f'[CQ:touch,id={self.msg.session.sender}]')
+                    elif qq_frame_type() == 'mirai':
+                        await bot.send_group_msg(group_id=self.msg.session.target,
+                                                 message=f'[CQ:poke,qq={self.msg.session.sender}]')
 
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             pass
@@ -403,18 +393,20 @@ class FetchTarget(FetchTargetT):
             group_list = [g['group_id'] for g in group_list_raw]
             friend_list_raw = await bot.call_action('get_friend_list')
             friend_list = [f['user_id'] for f in friend_list_raw]
-            guild_list_raw = await bot.call_action('get_guild_list')
+
             guild_list = []
-            for g in guild_list_raw:
-                try:
-                    get_channel_list = await bot.call_action('get_guild_channel_list', guild_id=g['guild_id'],
-                                                             no_cache=True)
-                    for channel in get_channel_list:
-                        if channel['channel_type'] == 1:
-                            guild_list.append(f"{str(g['guild_id'])}|{str(channel['channel_id'])}")
-                except Exception:
-                    traceback.print_exc()
-                    continue
+            if qq_frame_type() == 'mirai':
+                guild_list_raw = await bot.call_action('get_guild_list')
+                for g in guild_list_raw:
+                    try:
+                        get_channel_list = await bot.call_action('get_guild_channel_list', guild_id=g['guild_id'],
+                                                                 no_cache=True)
+                        for channel in get_channel_list:
+                            if channel['channel_type'] == 1:
+                                guild_list.append(f"{str(g['guild_id'])}|{str(channel['channel_id'])}")
+                    except Exception:
+                        traceback.print_exc()
+                        continue
 
             in_whitelist = []
             else_ = []

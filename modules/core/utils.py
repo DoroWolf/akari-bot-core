@@ -1,14 +1,16 @@
 import platform
-from datetime import datetime
+from datetime import datetime, timedelta, UTC
 
+import jwt
 import psutil
 from cpuinfo import get_cpu_info
 
 from config import Config
-from core.builtins import Bot, Plain, Url
+from core.builtins import Bot, I18NContext, Url
 from core.component import module
 from core.utils.i18n import get_available_locales, Locale, load_locale_file
 from core.utils.info import Info
+from core.utils.text import isint
 from core.utils.web_render import WebRender
 from database import BotDBUtil
 
@@ -16,22 +18,25 @@ import subprocess
 
 jwt_secret = Config('jwt_secret', cfg_type=str)
 
-ver = module('version', base=True)
+ver = module('version', base=True, doc=True)
 
 
 @ver.command('{{core.help.version}}')
 async def bot_version(msg: Bot.MessageSession):
     if Info.version:
         commit = Info.version[0:6]
-        repo_url = subprocess.check_output(['git', 'config', '--get', 'remote.origin.url']).decode().strip()
-        repo_url = repo_url.replace('.git', '')  # Remove .git from the repo URL
-        commit_url = f"{repo_url}/commit/{commit}"
-        await msg.finish([Plain(msg.locale.t('core.message.version', commit=commit)), Url(commit_url)])
+        send_msgs = [I18NContext('core.message.version', commit=commit)]
+        if Config('enable_commit_url', True):
+            repo_url = subprocess.check_output(['git', 'config', '--get', 'remote.origin.url']).decode().strip()
+            repo_url = repo_url.replace('.git', '')  # Remove .git from the repo URL
+            commit_url = f"{repo_url}/commit/{commit}"
+            send_msgs.append(Url(commit_url))
+        await msg.finish(send_msgs)
     else:
         await msg.finish(msg.locale.t('core.message.version.unknown'))
 
 
-ping = module('ping', base=True)
+ping = module('ping', base=True, doc=True)
 
 started_time = datetime.now()
 
@@ -76,7 +81,8 @@ admin = module('admin',
                alias={'ban': 'admin ban',
                       'unban': 'admin unban',
                       'ban list': 'admin ban list'},
-               desc='{core.help.admin.desc}')
+               desc='{core.help.admin.desc}',
+               doc=True)
 
 
 @admin.command([
@@ -138,7 +144,7 @@ async def config_ban(msg: Bot.MessageSession):
             await msg.finish(msg.locale.t("core.message.admin.ban.not_yet"))
 
 
-locale = module('locale', base=True, desc='{core.help.locale.desc}', alias='lang')
+locale = module('locale', base=True, desc='{core.help.locale.desc}', alias='lang', doc=True)
 
 
 @locale.command()
@@ -172,7 +178,7 @@ async def reload_locale(msg: Bot.MessageSession):
         await msg.finish(msg.locale.t("core.message.locale.reload.failed", detail='\n'.join(err)))
 
 
-whoami = module('whoami', base=True)
+whoami = module('whoami', base=True, doc=True)
 
 
 @whoami.command('{{core.help.whoami}}')
@@ -188,7 +194,7 @@ async def _(msg: Bot.MessageSession):
         msg.locale.t('core.message.whoami', sender=msg.target.sender_id, target=msg.target.target_id) + perm)
 
 
-setup = module('setup', base=True, desc='{core.help.setup.desc}', alias='toggle')
+setup = module('setup', base=True, desc='{core.help.setup.desc}', doc=True, alias='toggle')
 
 
 @setup.command('typing {{core.help.setup.typing}}')
@@ -237,14 +243,14 @@ async def _(msg: Bot.MessageSession, offset: str):
 
 @setup.command('cooldown <second> {{core.help.setup.cooldown}}', required_admin=True)
 async def _(msg: Bot.MessageSession, second: str):
-    if not second.isdigit():
+    if not isint(second):
         await msg.finish(msg.locale.t('core.message.setup.cooldown.invalid'))
     else:
         msg.data.edit_option('cooldown_time', second)
         await msg.finish(msg.locale.t('core.message.setup.cooldown.success', time=second))
 
 
-mute = module('mute', base=True, required_admin=True)
+mute = module('mute', base=True, doc=True, required_admin=True)
 
 
 @mute.command('{{core.help.mute}}')
@@ -256,7 +262,7 @@ async def _(msg: Bot.MessageSession):
         await msg.finish(msg.locale.t('core.message.mute.disable'))
 
 
-leave = module('leave', base=True, required_admin=True, available_for=['QQ|Group'], alias='dismiss')
+leave = module('leave', base=True, doc=True, required_admin=True, available_for=['QQ|Group'], alias='dismiss')
 
 
 @leave.command('{{core.help.leave}}')
@@ -267,3 +273,16 @@ async def _(msg: Bot.MessageSession):
         await msg.call_api('set_group_leave', group_id=msg.session.target)
     else:
         await msg.finish()
+
+
+token = module('token', base=True, hidden=True)
+
+
+@token.command('<code> {{core.help.token}}')
+async def _(msg: Bot.MessageSession, code: str):
+    await msg.finish(jwt.encode({
+        'exp': datetime.now(UTC) + timedelta(seconds=60 * 60 * 24 * 7),  # 7 days
+        'iat': datetime.now(UTC),
+        'senderId': msg.target.sender_id,
+        'code': code
+    }, bytes(jwt_secret, 'utf-8'), algorithm='HS256'))

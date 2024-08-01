@@ -4,9 +4,7 @@ import re
 import traceback
 from datetime import datetime
 
-from aiocqhttp import NetworkError
-from tenacity import RetryError
-
+from bots.aiocqhttp.utils import qq_frame_type
 from config import Config
 from core.builtins import command_prefix, ExecutionLockList, ErrorMessage, MessageTaskManager, Url, Bot, \
     base_superuser_list
@@ -24,7 +22,7 @@ from database import BotDBUtil
 enable_tos = Config('enable_tos', True)
 enable_analytics = Config('enable_analytics', False)
 report_targets = Config('report_targets', [])
-TOS_TEMPBAN_TIME = Config('tos_temp_ban_time', 300)
+TOS_TEMPBAN_TIME = Config('tos_temp_ban_time', 300) if Config('tos_temp_ban_time', 300) > 0 else 300
 
 counter_same = {}  # 命令使用次数计数（重复使用单一命令）
 counter_all = {}  # 命令使用次数计数（使用所有命令）
@@ -114,6 +112,46 @@ async def check_target_cooldown(msg: Bot.MessageSession):
             cooldown_counter[msg.target.target_id] = {msg.target.sender_id: {'ts': datetime.now().timestamp()}}
 
 
+def transform_alias_byregex(msg, command: str):
+    aliases = {k: v for k, v in msg.options.get('command_alias').items() if re.search(r'\${[^}]*}', k)}
+    for pattern, replacement in aliases.items():
+        # 使用正则表达式匹配并分隔多个连在一起的占位符
+        pattern = re.sub(r'(\$\{\w+\})(?=\$\{\w+\})', r'\1 ', pattern)
+
+        # 匹配占位符
+        pattern_placeholders = re.findall(r'\$\{([^{}$]+)\}', pattern)
+        replacement_placeholders = re.findall(r'\$\{([^{}$]+)\}', replacement)
+
+        regex_pattern = re.escape(pattern)
+        for placeholder in pattern_placeholders:
+            regex_pattern = regex_pattern.replace(re.escape(f'${{{placeholder}}}'), r'(\S+)')  # 匹配非空格字符
+
+        match = re.match(regex_pattern, command)
+
+        if match:
+            result = replacement
+            groups = match.groups()
+
+            # 替换模板中的占位符
+            for i, placeholder in enumerate(pattern_placeholders):
+                if i < len(groups):
+                    result = result.replace(f'${{{placeholder}}}', groups[i])
+                else:
+                    result = result.replace(f'${{{placeholder}}}', '')
+
+            # 检查未匹配的占位符并保留原始文本
+            for placeholder in replacement_placeholders:
+                if placeholder not in pattern_placeholders:
+                    result = result.replace(f'${{{placeholder}}}', f'${{{placeholder}}}')
+                else:
+                    result = result.replace(f'${{{placeholder}}}', '')
+
+            Logger.debug(msg.prefixes[0] + result)
+            return msg.prefixes[0] + result
+
+    return command
+
+
 async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, prefix: list = None,
                  running_mention: bool = False):
     """
@@ -126,7 +164,6 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
     """
     identify_str = f'[{msg.target.sender_id}{
         f" ({msg.target.target_id})" if msg.target.target_from != msg.target.sender_from else ""}]'
-    limited_action = 'touch' if Config('use_shamrock', False) else 'poke'
     # Logger.info(f'{identify_str} -> [Bot]: {display}')
     try:
         asyncio.create_task(MessageTaskManager.check(msg))
@@ -140,19 +177,25 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                 or msg.target.sender_id in msg.options.get('ban', []):
             return
 
-        get_custom_alias = msg.options.get('command_alias')
-        command_split: list = msg.trigger_msg.split(' ')  # 切割消息
-        if get_custom_alias:
-            get_display_alias = get_custom_alias.get(command_split[0])
-            if get_display_alias:
-                command_split[0] = get_display_alias  # 将自定义别名替换为命令
-        msg.trigger_msg = ' '.join(command_split)  # 重新连接消息
-
         msg.prefixes = command_prefix.copy()  # 复制一份作为基础命令前缀
         get_custom_prefix = msg.options.get('command_prefix')  # 获取自定义命令前缀
         if get_custom_prefix:
             msg.prefixes = get_custom_prefix + msg.prefixes  # 混合
         msg.prefixes = [i for i in set(msg.prefixes) if i.strip()]  # 过滤重复与空白前缀
+
+        if msg.options.get('command_alias'):
+            msg.trigger_msg = transform_alias_byregex(msg, msg.trigger_msg)  # 将自定义别名替换为命令
+            #  旧语法兼容
+            get_custom_alias = {
+                k: v for k, v in (
+                    msg.options.get('command_alias')).items() if not re.search(
+                    r'\${[^}]*}', k)}
+            command_split = msg.trigger_msg.split(' ')  # 切割消息
+            if get_custom_alias:
+                get_display_alias = get_custom_alias.get(command_split[0])
+                if get_display_alias:
+                    command_split[0] = msg.prefixes[0] + get_display_alias  # 将自定义别名替换为命令
+                    msg.trigger_msg = ' '.join(command_split)  # 重新连接消息
 
         disable_prefix = False
         if prefix:  # 如果上游指定了命令前缀，则使用指定的命令前缀
@@ -212,9 +255,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
             msg.trigger_msg = command  # 触发该命令的消息，去除消息前缀
             command_first_word = command_split[0].lower()
 
-            mute = False
-            if command_first_word == 'mute':
-                mute = True
+            mute = True if command_first_word == 'mute' else False
 
             in_mute = msg.muted
             if in_mute and not mute:
@@ -237,8 +278,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                                                             prefix=msg.prefixes[0])
                             await msg.send_message(desc)
                         else:
-                            await msg.send_message(ErrorMessage(msg.locale.t("error.module.unbound",
-                                                                             module=command_first_word)))
+                            await msg.send_message(ErrorMessage("{error.module.unbound}", module=command_first_word))
                         return
 
                     if module.required_base_superuser:
@@ -352,8 +392,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                             except InvalidHelpDocTypeError:
                                 Logger.error(traceback.format_exc())
                                 await msg.send_message(
-                                    ErrorMessage(msg.locale.t("error.module.helpdoc.invalid",
-                                                              module=command_first_word)))
+                                    ErrorMessage("{error.module.helpdoc.invalid}", module=command_first_word))
                                 return
 
                         await execute_submodule(msg, command_first_word, command_split)
@@ -368,9 +407,21 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                                     await func.function(msg)
                                 raise FinishedException(msg.sent)  # if not using msg.finish
                 except SendMessageFailed:
-                    if msg.target.target_from == 'QQ|Group':
-                        await msg.call_api('send_group_msg', group_id=msg.session.target,
-                                           message=f'[CQ:{limited_action},qq={int(Config("qq_account", cfg_type=(str, int)))}]')
+                    if msg.target.target_from == 'QQ|Group':  # wtf onebot 11
+                        if qq_frame_type() == 'ntqq':
+                            await msg.call_api('set_msg_emoji_like', message_id=msg.session.message.message_id,
+                                               emoji_id=str(Config('qq_limited_emoji', '10060', (str, int))))
+                        elif qq_frame_type() == 'lagrange':
+                            await msg.call_api('group_poke', group_id=msg.session.target,
+                                               user_id=int(Config("qq_account", cfg_type=(int, str))))
+                        elif qq_frame_type() == 'shamrock':
+                            await msg.call_api('send_group_msg', group_id=msg.session.target,
+                                               message=f'[CQ:touch,id={int(Config("qq_account", cfg_type=(int, str)))}]')
+                        elif qq_frame_type() == 'mirai':
+                            await msg.call_api('send_group_msg', group_id=msg.session.target,
+                                               message=f'[CQ:poke,qq={int(Config("qq_account", cfg_type=(int, str)))}]')
+                        else:
+                            pass
                     await msg.send_message(msg.locale.t("error.message.limited"))
 
                 except FinishedException as e:
@@ -396,23 +447,22 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                     err_msg = msg.locale.tl_str(str(e))
                     await msg.send_message(msg.locale.t("error.prompt.noreport", detail=err_msg))
 
-                except (asyncio.exceptions.TimeoutError, RetryError, NetworkError) as e:
-                    Logger.error(traceback.format_exc())
-                    errmsg = msg.locale.t('error.prompt.timeout', detail=str(e))
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    Logger.error(tb)
+                    if "timeout" in str(e).lower().replace(' ', ''):
+                        timeout = True
+                        errmsg = msg.locale.t('error.prompt.timeout', detail=str(e))
+                    else:
+                        timeout = False
+                        errmsg = msg.locale.t('error.prompt.report', detail=str(e))
+
                     if Config('bug_report_url', cfg_type=str):
                         errmsg += '\n' + msg.locale.t('error.prompt.address',
                                                       url=str(Url(Config('bug_report_url', cfg_type=str))))
                     await msg.send_message(errmsg)
 
-                except Exception as e:
-                    tb = traceback.format_exc()
-                    Logger.error(tb)
-                    errmsg = msg.locale.t('error.prompt.report', detail=str(e))
-                    if Config('bug_report_url', cfg_type=str):
-                        errmsg += '\n' + msg.locale.t('error.prompt.address',
-                                                      url=str(Url(Config('bug_report_url', cfg_type=str))))
-                    await msg.send_message(errmsg)
-                    if report_targets:
+                    if not timeout and report_targets:
                         for target in report_targets:
                             if f := await Bot.FetchTarget.fetch_target(target):
                                 await f.send_direct_message(
@@ -517,25 +567,24 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                             await msg.send_message(msg.locale.t("error.prompt.noreport", detail=err_msg))
 
                         except AbuseWarning as e:
-                            await tos_abuse_warning(msg, str(e))\
-
-                        except (asyncio.exceptions.TimeoutError, RetryError, NetworkError) as e:
-                            Logger.error(traceback.format_exc())
-                            errmsg = msg.locale.t('error.prompt.timeout', detail=str(e))
-                            if Config('bug_report_url', cfg_type=str):
-                                errmsg += '\n' + msg.locale.t('error.prompt.address',
-                                                              url=str(Url(Config('bug_report_url', cfg_type=str))))
-                            await msg.send_message(errmsg)
+                            await tos_abuse_warning(msg, str(e))
 
                         except Exception as e:
                             tb = traceback.format_exc()
                             Logger.error(tb)
-                            errmsg = msg.locale.t('error.prompt.report', detail=str(e))
+                            if "timeout" in str(e).lower().replace(' ', ''):
+                                timeout = True
+                                errmsg = msg.locale.t('error.prompt.timeout', detail=str(e))
+                            else:
+                                timeout = False
+                                errmsg = msg.locale.t('error.prompt.report', detail=str(e))
+
                             if Config('bug_report_url', cfg_type=str):
                                 errmsg += '\n' + msg.locale.t('error.prompt.address',
                                                               url=str(Url(Config('bug_report_url', cfg_type=str))))
                             await msg.send_message(errmsg)
-                            if report_targets:
+
+                            if not timeout and report_targets:
                                 for target in report_targets:
                                     if f := await Bot.FetchTarget.fetch_target(target):
                                         await f.send_direct_message(
@@ -544,15 +593,27 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                             ExecutionLockList.remove(msg)
 
             except SendMessageFailed:
-                if msg.target.target_from == 'QQ|Group':
-                    await msg.call_api('send_group_msg', group_id=msg.session.target,
-                                       message=f'[CQ:{limited_action},qq={int(Config("qq_account", cfg_type=(int, str)))}]')
+                if msg.target.target_from == 'QQ|Group':  # wtf onebot 11
+                    if qq_frame_type() == 'ntqq':
+                        await msg.call_api('set_msg_emoji_like', message_id=msg.session.message.message_id,
+                                           emoji_id=str(Config('qq_limited_emoji', '10060', (str, int))))
+                    elif qq_frame_type() == 'lagrange':
+                        await msg.call_api('group_poke', group_id=msg.session.target,
+                                           user_id=int(Config("qq_account", cfg_type=(int, str))))
+                    elif qq_frame_type() == 'shamrock':
+                        await msg.call_api('send_group_msg', group_id=msg.session.target,
+                                           message=f'[CQ:touch,id={int(Config("qq_account", cfg_type=(int, str)))}]')
+                    elif qq_frame_type() == 'mirai':
+                        await msg.call_api('send_group_msg', group_id=msg.session.target,
+                                           message=f'[CQ:poke,qq={int(Config("qq_account", cfg_type=(int, str)))}]')
+                    else:
+                        pass
                 await msg.send_message((msg.locale.t("error.message.limited")))
                 continue
         return msg
 
     except WaitCancelException:  # 出现于等待被取消的情况
-        Logger.warn('Waiting task cancelled by user.')
+        Logger.warning('Waiting task cancelled by user.')
 
     except Exception:
         Logger.error(traceback.format_exc())

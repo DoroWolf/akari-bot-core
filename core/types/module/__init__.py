@@ -25,7 +25,8 @@ class Module:
                  developers: Union[str, list, tuple, None] = None,
                  required_admin: bool = False,
                  base: bool = False,
-                 hide: bool = False,
+                 doc: bool = False,
+                 hidden: bool = False,
                  required_superuser: bool = False,
                  required_base_superuser: bool = False,
                  available_for: Union[str, list, tuple, None] = '*',
@@ -42,7 +43,8 @@ class Module:
         self.developers: List[str] = convert2lst(developers)
         self.required_admin: bool = required_admin
         self.base: bool = base
-        self.hide: bool = hide
+        self.doc: bool = doc
+        self.hidden: bool = hidden
         self.required_superuser: bool = required_superuser
         self.required_base_superuser: bool = required_base_superuser
         self.available_for: List[str] = convert2lst(available_for)
