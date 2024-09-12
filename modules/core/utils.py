@@ -10,7 +10,6 @@ from core.builtins import Bot, I18NContext, Url
 from core.component import module
 from core.utils.i18n import get_available_locales, Locale, load_locale_file
 from core.utils.info import Info
-from core.utils.text import isint
 from core.utils.web_render import WebRender
 from database import BotDBUtil
 
@@ -199,13 +198,11 @@ setup = module('setup', base=True, desc='{core.help.setup.desc}', doc=True, alia
 
 @setup.command('typing {{core.help.setup.typing}}')
 async def _(msg: Bot.MessageSession):
-    target = BotDBUtil.SenderInfo(msg.target.sender_id)
-    state = target.query.disable_typing
-    if not state:
-        target.edit('disable_typing', True)
+    if not msg.info.disable_typing:
+        msg.info.edit('disable_typing', True)
         await msg.finish(msg.locale.t('core.message.setup.typing.disable'))
     else:
-        target.edit('disable_typing', False)
+        msg.info.edit('disable_typing', False)
         await msg.finish(msg.locale.t('core.message.setup.typing.enable'))
 
 '''
@@ -242,12 +239,10 @@ async def _(msg: Bot.MessageSession, offset: str):
 
 
 @setup.command('cooldown <second> {{core.help.setup.cooldown}}', required_admin=True)
-async def _(msg: Bot.MessageSession, second: str):
-    if not isint(second):
-        await msg.finish(msg.locale.t('core.message.setup.cooldown.invalid'))
-    else:
-        msg.data.edit_option('cooldown_time', second)
-        await msg.finish(msg.locale.t('core.message.setup.cooldown.success', time=second))
+async def _(msg: Bot.MessageSession, second: int):
+    second = 0 if second < 0 else second
+    msg.data.edit_option('cooldown_time', second)
+    await msg.finish(msg.locale.t('core.message.setup.cooldown.success', time=second))
 
 
 mute = module('mute', base=True, doc=True, required_admin=True)

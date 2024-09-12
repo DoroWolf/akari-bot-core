@@ -3,13 +3,21 @@
 
 # 小可 · AkariBot v4
 
-</div>
+_基于 OneBot 11 开发的可扩展、多平台机器人_
 
-![GitHub issues](https://img.shields.io/github/issues/Teahouse-Studios/akari-bot) ![GitHub pull requests](https://img.shields.io/github/issues-pr/Teahouse-Studios/akari-bot) ![License](https://img.shields.io/github/license/Teahouse-Studios/akari-bot) ![GitHub tag](https://img.shields.io/github/v/tag/Teahouse-Studios/akari-bot?include_prereleases) [![Crowdin](https://badges.crowdin.net/akari-bot/localized.svg)](https://crowdin.com/project/akari-bot) ![GitHub Repo stars](https://img.shields.io/github/stars/Teahouse-Studios/akari-bot?style=social)
+[![GitHub issues](https://img.shields.io/github/issues/Teahouse-Studios/akari-bot)](https://github.com/Teahouse-Studios/akari-bot/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/Teahouse-Studios/akari-bot)](https://github.com/Teahouse-Studios/akari-bot/pulls)<!--![GitHub tag](https://img.shields.io/github/v/tag/Teahouse-Studios/akari-bot?include_prereleases)-->
+[![Crowdin](https://badges.crowdin.net/akari-bot/localized.svg)](https://crowdin.com/project/akari-bot)
+![GitHub Repo stars](https://img.shields.io/github/stars/Teahouse-Studios/akari-bot?style=social)
+<br>
+![Python](https://img.shields.io/badge/Python-3.12+-blue)
+![OneBot v11](https://img.shields.io/badge/OneBot-v11-black)
+[![License](https://img.shields.io/github/license/Teahouse-Studios/akari-bot)](https://github.com/Teahouse-Studios/akari-bot/blob/master/LICENSE)
+</div>
 
 ## 介绍
 
-**小可**是基于多个框架开发的可扩展、多平台机器人。当前形象由 [OasisAkari](https://github.com/OasisAkari) 绘制。
+**小可**是基于 OneBot 11 开发的可扩展、多平台机器人。当前形象由 [OasisAkari](https://github.com/OasisAkari) 绘制。
 
 目前小可还正在持续开发中。
 
@@ -31,13 +39,9 @@
 
 #### QQ
 
-~~目前 QQ 上稳定运行的小可实例为小可三号机。由于腾讯风控问题，请[在此提交](https://github.com/Teahouse-Studios/akari-bot/issues/new?assignees=OasisAkari&labels=New&template=add_new_group.yaml&title=%5BNEW%5D%3A+)入群申请。~~
-
-~~QQ 频道的测试版支持也请在上方链接申请。~~
+目前 QQ 上稳定运行的小可实例为小可三号机。由于腾讯风控问题，请[在此提交](https://github.com/Teahouse-Studios/akari-bot/issues/new?assignees=OasisAkari&labels=New&template=add_new_group.yaml&title=%5BNEW%5D%3A+)入群申请。
 
 你也可以加入我们的 QQ 公共实例测试群：[738829671](http://qm.qq.com/cgi-bin/qm/qr?k=nXkV2SUP_WWlCuSzzpnKJK_uYkG7n1im)
-
-我们正在进行 QQ 频道官方机器人入驻，未来可能会成为官方认证的机器人。
 
 #### Discord
 
@@ -57,15 +61,13 @@
 
 ### 自搭建
 
-你可以参考[此处](./docs/DEPLOY.md)来尝试搭建。
+你可以参考[此处](https://bot.teahouse.team/wiki/%E8%87%AA%E6%90%AD%E5%BB%BA)来尝试搭建。
 
 若遇到问题，可以通过 [Issue](https://github.com/Teahouse-Studios/akari-bot/issues/new) 或其他方式咨询开发者。
 
 ### 多语言
 
 你可以前往 [Crowdin](https://crowdin.com/project/akari-bot) 参与改进小可的多语言支持。
-
-关于多语言规范的详细说明，请见[此处](./docs/LOCALES.md)。
 
 ### 贡献
 

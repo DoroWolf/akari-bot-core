@@ -20,7 +20,7 @@ from core.utils.text import isfloat, isint
 from database import BotDBUtil
 
 
-target_list = ["Discord|Channel", "Discord|DM|Channel", "KOOK|Group",
+target_list = ["Discord|Channel", "Discord|DM|Channel", "KOOK|Group", "KOOK|Person",
                "Matrix|Room", "QQ|Group", "QQ|Guild", "QQ|Private", "Telegram|Channel",
                "Telegram|Group", "Telegram|Private", "Telegram|Supergroup", "TEST|Console",]
 sender_list = ["Discord|Client", "KOOK|User", "Matrix", "QQ", "QQ|Tiny", "Telegram|User", "TEST",]
@@ -126,10 +126,11 @@ async def _(msg: Bot.MessageSession, target: str):
         v = msg.parsed_msg.get('<v>')
         if re.match(r'\[.*\]|\{.*\}', v):
             try:
-                v = v.replace('\'', '\"')
+                v = v.replace("'", "\"")
                 v = json.loads(v)
-            except json.JSONDecodeError:
-                await msg.finish(msg.locale.t("core.message.config.write.failed"))
+            except json.JSONDecodeError as e:
+                Logger.error(str(e))
+                await msg.finish(msg.locale.t("failed"))
         elif v.lower() == 'true':
             v = True
         elif v.lower() == 'false':
@@ -164,12 +165,14 @@ async def _(msg: Bot.MessageSession, user: str):
     stat = ''
     if not any(user.startswith(f'{sender_from}|') for sender_from in sender_list):
         await msg.finish(msg.locale.t("message.id.invalid.sender", sender=msg.target.sender_from))
-    warns = BotDBUtil.SenderInfo(user).query.warns
+    sender_info = BotDBUtil.SenderInfo(user)
+    warns = sender_info.query.warns
     temp_banned_time = await check_temp_ban(user)
-    is_banned = BotDBUtil.SenderInfo(user).query.isInBlockList
     if temp_banned_time:
         stat += '\n' + msg.locale.t("core.message.abuse.check.tempbanned", ban_time=temp_banned_time)
-    if is_banned:
+    if sender_info.is_in_allow_list:
+        stat += '\n' + msg.locale.t("core.message.abuse.check.trusted")
+    elif sender_info.is_in_block_list:
         stat += '\n' + msg.locale.t("core.message.abuse.check.banned")
     await msg.finish(msg.locale.t("core.message.abuse.check.warns", user=user, warns=warns) + stat)
 
@@ -210,7 +213,8 @@ async def _(msg: Bot.MessageSession, user: str):
 async def _(msg: Bot.MessageSession, user: str):
     if not any(user.startswith(f'{sender_from}|') for sender_from in sender_list):
         await msg.finish(msg.locale.t("message.id.invalid.sender", sender=msg.target.sender_from))
-    if BotDBUtil.SenderInfo(user).edit('isInBlockList', True):
+    sender_info = BotDBUtil.SenderInfo(user)
+    if sender_info.edit('isInBlockList', True) and sender_info.edit('isInAllowList', False):
         await msg.finish(msg.locale.t("core.message.abuse.ban.success", user=user))
 
 
@@ -218,8 +222,27 @@ async def _(msg: Bot.MessageSession, user: str):
 async def _(msg: Bot.MessageSession, user: str):
     if not any(user.startswith(f'{sender_from}|') for sender_from in sender_list):
         await msg.finish(msg.locale.t("message.id.invalid.sender", sender=msg.target.sender_from))
-    if BotDBUtil.SenderInfo(user).edit('isInBlockList', False):
+    sender_info = BotDBUtil.SenderInfo(user)
+    if sender_info.edit('isInBlockList', False):
         await msg.finish(msg.locale.t("core.message.abuse.unban.success", user=user))
+
+
+@ae.command('trust <user>')
+async def _(msg: Bot.MessageSession, user: str):
+    if not any(user.startswith(f'{sender_from}|') for sender_from in sender_list):
+        await msg.finish(msg.locale.t("message.id.invalid.sender", sender=msg.target.sender_from))
+    sender_info = BotDBUtil.SenderInfo(user)
+    if sender_info.edit('isInAllowList', True) and sender_info.edit('isInBlockList', False):
+        await msg.finish(msg.locale.t("core.message.abuse.trust.success", user=user))
+
+
+@ae.command('distrust <user>')
+async def _(msg: Bot.MessageSession, user: str):
+    if not any(user.startswith(f'{sender_from}|') for sender_from in sender_list):
+        await msg.finish(msg.locale.t("message.id.invalid.sender", sender=msg.target.sender_from))
+    sender_info = BotDBUtil.SenderInfo(user)
+    if sender_info.edit('isInAllowList', False):
+        await msg.finish(msg.locale.t("core.message.abuse.distrust.success", user=user))
 
 
 if Bot.client_name == 'QQ':
@@ -262,14 +285,17 @@ def update_dependencies():
 
 @upd.command()
 async def update_bot(msg: Bot.MessageSession):
-    if Info.version:
-        pull_repo_result = pull_repo()
-        if pull_repo_result:
-            await msg.send_message(pull_repo_result)
-        else:
-            Logger.warning(f'Failed to get Git repository result.')
-            await msg.send_message(msg.locale.t("core.message.update.failed"))
-    await msg.finish(update_dependencies())
+    if not Info.binary_mode:
+        if Info.version:
+            pull_repo_result = pull_repo()
+            if pull_repo_result:
+                await msg.send_message(pull_repo_result)
+            else:
+                Logger.warning(f'Failed to get Git repository result.')
+                await msg.send_message(msg.locale.t("core.message.update.failed"))
+        await msg.finish(update_dependencies())
+    else:
+        await msg.finish(msg.locale.t("core.message.update.binary_mode"))
 
 
 if Info.subprocess:
@@ -320,22 +346,25 @@ if Info.subprocess:
 
     @upds.command()
     async def update_and_restart_bot(msg: Bot.MessageSession):
-        confirm = await msg.wait_confirm(msg.locale.t("core.message.confirm"), append_instruction=False)
-        if confirm:
-            restart_time.append(datetime.now().timestamp())
-            await wait_for_restart(msg)
-            write_version_cache(msg)
-            if Info.version:
-                pull_repo_result = pull_repo()
-                if pull_repo_result != '':
-                    await msg.send_message(pull_repo_result)
-                else:
-                    Logger.warning(f'Failed to get Git repository result.')
-                    await msg.send_message(msg.locale.t("core.message.update.failed"))
-            await msg.send_message(update_dependencies())
-            restart()
+        if not Info.binary_mode:
+            confirm = await msg.wait_confirm(msg.locale.t("core.message.confirm"), append_instruction=False)
+            if confirm:
+                restart_time.append(datetime.now().timestamp())
+                await wait_for_restart(msg)
+                write_version_cache(msg)
+                if Info.version:
+                    pull_repo_result = pull_repo()
+                    if pull_repo_result != '':
+                        await msg.send_message(pull_repo_result)
+                    else:
+                        Logger.warning(f'Failed to get Git repository result.')
+                        await msg.send_message(msg.locale.t("core.message.update.failed"))
+                await msg.send_message(update_dependencies())
+                restart()
+            else:
+                await msg.finish()
         else:
-            await msg.finish()
+            await msg.finish(msg.locale.t("core.message.update.binary_mode"))
 
 
 exit_ = module('exit', required_superuser=True, base=True, doc=True, available_for=['TEST|Console'])
@@ -442,6 +471,7 @@ if Config('enable_eval', False):
         try:
             await msg.finish(str(eval(display_msg, {'msg': msg})))
         except Exception as e:
+            Logger.error(str(e))
             raise NoReportException(e)
 
 
@@ -465,11 +495,11 @@ async def _(msg: Bot.MessageSession, k: str, v: str):
         v = float(v)
     elif re.match(r'\[.*\]', v):
         try:
-            v = v.replace('\'', '\"')
+            v = v.replace("'", "\"")
             v = json.loads(v)
-        except json.JSONDecodeError:
-            await msg.finish(msg.locale.t("core.message.config.write.failed"))
-
+        except json.JSONDecodeError as e:
+            Logger.error(str(e))
+            await msg.finish(msg.locale.t("failed"))
     CFG.write(k, v, msg.parsed_msg['-s'])
     await msg.finish(msg.locale.t("success"))
 
@@ -489,37 +519,36 @@ if Config('enable_petal', False):
     async def _(msg: Bot.MessageSession):
         await msg.finish(msg.locale.t('core.message.petal.self', petal=msg.petal))
 
-    @petal.command('[<target>] {{core.help.petal}}', required_superuser=True)
+    @petal.command('[<sender>] {{core.help.petal}}', required_superuser=True)
     async def _(msg: Bot.MessageSession):
-        target = msg.parsed_msg['<target>']
-        if not any(target.startswith(f'{target_from}|') for target_from in target_list):
-            await msg.finish(msg.locale.t("message.id.invalid.target", target=msg.target.target_from))
-        target_info = BotDBUtil.TargetInfo(target)
-        await msg.finish(msg.locale.t('core.message.petal', target=target, petal=target_info.petal))
+        sender = msg.parsed_msg['<sender>']
+        if not any(sender.startswith(f'{sender_from}|') for sender_from in sender_list):
+            await msg.finish(msg.locale.t("message.id.invalid.sender", sender=msg.target.sender_from))
+        sender_info = BotDBUtil.SenderInfo(sender)
+        await msg.finish(msg.locale.t('core.message.petal', sender=sender, petal=sender_info.petal))
 
-    @petal.command('modify <petal> [<target>]', required_superuser=True)
-    async def _(msg: Bot.MessageSession, petal: str):
-        if '<target>' in msg.parsed_msg:
-            target = msg.parsed_msg['<target>']
-            if not any(target.startswith(f'{target_from}|') for target_from in target_list):
-                await msg.finish(msg.locale.t("message.id.invalid.target", target=msg.target.target_from))
-            target_info = BotDBUtil.TargetInfo(target)
-            target_info.modify_petal(int(petal))
+    @petal.command('modify <petal> [<sender>]', required_superuser=True)
+    async def _(msg: Bot.MessageSession, petal: int, sender: str = None):
+        if sender:
+            if not any(sender.startswith(f'{sender_from}|') for sender_from in sender_list):
+                await msg.finish(msg.locale.t("message.id.invalid.sender", sender=msg.target.sender_from))
+            sender_info = BotDBUtil.SenderInfo(sender)
+            sender_info.modify_petal(petal)
             await msg.finish(
-                msg.locale.t('core.message.petal.modify', target=target, add_petal=petal, petal=target_info.petal))
+                msg.locale.t('core.message.petal.modify', sender=sender, add_petal=petal, petal=sender_info.petal))
         else:
-            msg.data.modify_petal(int(petal))
-            await msg.finish(msg.locale.t('core.message.petal.modify.self', add_petal=petal, petal=msg.petal))
+            sender_info = BotDBUtil.SenderInfo(msg.target.sender_id)
+            sender_info.modify_petal(petal)
+            await msg.finish(msg.locale.t('core.message.petal.modify.self', add_petal=petal, petal=sender_info.petal))
 
-    @petal.command('clear [<target>]', required_superuser=True)
-    async def _(msg: Bot.MessageSession):
-        if '<target>' in msg.parsed_msg:
-            target = msg.parsed_msg['<target>']
-            if not any(target.startswith(f'{target_from}|') for target_from in target_list):
-                await msg.finish(msg.locale.t("message.id.invalid.target", target=msg.target.target_from))
-            target_info = BotDBUtil.TargetInfo(target)
-            target_info.clear_petal()
-            await msg.finish(msg.locale.t('core.message.petal.clear', target=target))
+    @petal.command('clear [<sender>]', required_superuser=True)
+    async def _(msg: Bot.MessageSession, sender: str = None):
+        if sender:
+            if not any(sender.startswith(f'{sender_from}|') for sender_from in sender_list):
+                await msg.finish(msg.locale.t("message.id.invalid.sender", sender=msg.target.sender_from))
+            sender_info = BotDBUtil.SenderInfo(sender)
+            sender_info.clear_petal()
+            await msg.finish(msg.locale.t('core.message.petal.clear', sender=sender))
         else:
-            msg.data.clear_petal()
+            msg.info.clear_petal()
             await msg.finish(msg.locale.t('core.message.petal.clear.self'))

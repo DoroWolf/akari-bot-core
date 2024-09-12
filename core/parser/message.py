@@ -107,47 +107,52 @@ async def check_target_cooldown(msg: Bot.MessageSession):
                 cooldown_counter[msg.target.target_id].update(
                     {msg.target.sender_id: {'ts': datetime.now().timestamp()}})
             else:
-                await msg.finish(msg.locale.t('message.cooldown', time=cooldown_time - time))
+                await msg.finish(msg.locale.t('message.cooldown.manual', time=cooldown_time - time))
         else:
             cooldown_counter[msg.target.target_id] = {msg.target.sender_id: {'ts': datetime.now().timestamp()}}
 
 
-def transform_alias_byregex(msg, command: str):
-    aliases = {k: v for k, v in msg.options.get('command_alias').items() if re.search(r'\${[^}]*}', k)}
+def transform_alias(msg, command: str):
+    aliases = {k: v for k, v in msg.options.get('command_alias').items()}
+    command_split = msg.trigger_msg.split(' ')  # 切割消息
     for pattern, replacement in aliases.items():
-        # 使用正则表达式匹配并分隔多个连在一起的占位符
-        pattern = re.sub(r'(\$\{\w+\})(?=\$\{\w+\})', r'\1 ', pattern)
+        if re.search(r'\${[^}]*}', pattern):
+            # 使用正则表达式匹配并分隔多个连在一起的占位符
+            pattern = re.sub(r'(\$\{\w+\})(?=\$\{\w+\})', r'\1 ', pattern)
+            # 匹配占位符
+            pattern_placeholders = re.findall(r'\$\{([^{}$]+)\}', pattern)
+            replacement_placeholders = re.findall(r'\$\{([^{}$]+)\}', replacement)
 
-        # 匹配占位符
-        pattern_placeholders = re.findall(r'\$\{([^{}$]+)\}', pattern)
-        replacement_placeholders = re.findall(r'\$\{([^{}$]+)\}', replacement)
+            regex_pattern = re.escape(pattern)
+            for placeholder in pattern_placeholders:
+                regex_pattern = regex_pattern.replace(re.escape(f'${{{placeholder}}}'), r'(\S+)')  # 匹配非空格字符
 
-        regex_pattern = re.escape(pattern)
-        for placeholder in pattern_placeholders:
-            regex_pattern = regex_pattern.replace(re.escape(f'${{{placeholder}}}'), r'(\S+)')  # 匹配非空格字符
+            match = re.match(regex_pattern, command)
+            if match:
+                result = replacement
+                groups = match.groups()
+                # 替换模板中的占位符
+                for i, placeholder in enumerate(pattern_placeholders):
+                    if i < len(groups):
+                        result = result.replace(f'${{{placeholder}}}', groups[i])
+                    else:
+                        result = result.replace(f'${{{placeholder}}}', '')
+                # 检查未匹配的占位符并保留原始文本
+                for placeholder in replacement_placeholders:
+                    if placeholder not in pattern_placeholders:
+                        result = result.replace(f'${{{placeholder}}}', f'${{{placeholder}}}')
+                    else:
+                        result = result.replace(f'${{{placeholder}}}', '')
 
-        match = re.match(regex_pattern, command)
-
-        if match:
-            result = replacement
-            groups = match.groups()
-
-            # 替换模板中的占位符
-            for i, placeholder in enumerate(pattern_placeholders):
-                if i < len(groups):
-                    result = result.replace(f'${{{placeholder}}}', groups[i])
-                else:
-                    result = result.replace(f'${{{placeholder}}}', '')
-
-            # 检查未匹配的占位符并保留原始文本
-            for placeholder in replacement_placeholders:
-                if placeholder not in pattern_placeholders:
-                    result = result.replace(f'${{{placeholder}}}', f'${{{placeholder}}}')
-                else:
-                    result = result.replace(f'${{{placeholder}}}', '')
-
-            Logger.debug(msg.prefixes[0] + result)
-            return msg.prefixes[0] + result
+                Logger.debug(msg.prefixes[0] + result)
+                return msg.prefixes[0] + result
+        elif command_split[0] == pattern:
+            # 旧语法兼容
+            command_split[0] = msg.prefixes[0] + replacement  # 将自定义别名替换为命令
+            Logger.debug(' '.join(command_split))
+            return ' '.join(command_split)  # 重新连接消息
+        else:
+            pass
 
     return command
 
@@ -172,8 +177,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
         msg.trigger_msg = remove_duplicate_space(msg.as_display())  # 将消息转换为一般显示形式
         if len(msg.trigger_msg) == 0:
             return
-        msg.target.sender_info = BotDBUtil.SenderInfo(msg.target.sender_id)
-        if msg.target.sender_info.is_in_block_list and not msg.target.sender_info.is_in_allow_list and not msg.target.sender_info.is_super_user \
+        if msg.info.is_in_block_list and not msg.info.is_in_allow_list and not msg.info.is_super_user \
                 or msg.target.sender_id in msg.options.get('ban', []):
             return
 
@@ -184,18 +188,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
         msg.prefixes = [i for i in set(msg.prefixes) if i.strip()]  # 过滤重复与空白前缀
 
         if msg.options.get('command_alias'):
-            msg.trigger_msg = transform_alias_byregex(msg, msg.trigger_msg)  # 将自定义别名替换为命令
-            #  旧语法兼容
-            get_custom_alias = {
-                k: v for k, v in (
-                    msg.options.get('command_alias')).items() if not re.search(
-                    r'\${[^}]*}', k)}
-            command_split = msg.trigger_msg.split(' ')  # 切割消息
-            if get_custom_alias:
-                get_display_alias = get_custom_alias.get(command_split[0])
-                if get_display_alias:
-                    command_split[0] = msg.prefixes[0] + get_display_alias  # 将自定义别名替换为命令
-                    msg.trigger_msg = ' '.join(command_split)  # 重新连接消息
+            msg.trigger_msg = transform_alias(msg, msg.trigger_msg)  # 将自定义别名替换为命令
 
         disable_prefix = False
         if prefix:  # 如果上游指定了命令前缀，则使用指定的命令前缀
@@ -368,7 +361,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                                     else:
                                         kwargs[func_params[list(func_params.keys())[0]].name] = msg
 
-                                    if not msg.target.sender_info.disable_typing:
+                                    if not msg.info.disable_typing:
                                         async with msg.Typing(msg):
                                             await parsed_msg[0].function(**kwargs)  # 将msg传入下游模块
                                     else:
@@ -400,7 +393,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                         msg.parsed_msg = None
                         for func in module.command_list.set:
                             if not func.help_doc:
-                                if not msg.target.sender_info.disable_typing:
+                                if not msg.info.disable_typing:
                                     async with msg.Typing(msg):
                                         await func.function(msg)  # 将msg传入下游模块
                                 else:
@@ -535,7 +528,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                                     ExecutionLockList.add(msg)
                                 else:
                                     return await msg.send_message(msg.locale.t("parser.command.running.prompt"))
-                                if rfunc.show_typing and not msg.target.sender_info.disable_typing:
+                                if rfunc.show_typing and not msg.info.disable_typing:
                                     async with msg.Typing(msg):
                                         await rfunc.function(msg)  # 将msg传入下游模块
                                 else:
