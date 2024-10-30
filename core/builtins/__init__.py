@@ -1,10 +1,10 @@
 import asyncio
 from typing import Union, List
 
-from config import Config
+from core.config import Config
 from core.loader import ModulesManager
 from core.types.message import FetchTarget, FetchedSession as FetchedSessionT, MsgInfo, Session, ModuleHookContext
-from database import BotDBUtil
+from core.database import BotDBUtil
 from .message import *
 from .message.chain import *
 from .message.internal import *
@@ -24,8 +24,8 @@ class Bot:
 
     @staticmethod
     async def send_message(target: Union[FetchedSessionT, MessageSession, str], msg: Union[MessageChain, list],
-                           disable_secret_check=False,
-                           allow_split_image=True):
+                           disable_secret_check=False, enable_parse_message=True,
+                           enable_split_image=True):
         if isinstance(target, str):
             target = await Bot.FetchTarget.fetch_target(target)
             if not target:
@@ -33,7 +33,7 @@ class Bot:
         if isinstance(msg, list):
             msg = MessageChain(msg)
         Logger.info(target.__dict__)
-        await target.send_direct_message(msg, disable_secret_check, allow_split_image)
+        await target.send_direct_message(msg, disable_secret_check, enable_split_image)
 
     @staticmethod
     async def fetch_target(target: str):
