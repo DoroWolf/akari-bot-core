@@ -6,24 +6,20 @@ from aiogram.types import FSInputFile
 
 from bots.aiogram.client import bot, token
 from bots.aiogram.info import *
-from core.config import Config
 from core.builtins import Bot, Plain, Image, Voice, MessageSession as MessageSessionT, I18NContext, MessageTaskManager
 from core.builtins.message.chain import MessageChain
+from core.config import Config
+from core.database import BotDBUtil
 from core.logger import Logger
-from core.types import FetchTarget as FetchTargetT, \
-    FinishedSession as FinS
+from core.types import FetchTarget as FetchTargetT, FinishedSession as FinishedSessionT
 from core.utils.http import download
 from core.utils.image import image_split
-from core.database import BotDBUtil
 
 enable_analytics = Config('enable_analytics', False)
 
 
-class FinishedSession(FinS):
+class FinishedSession(FinishedSessionT):
     async def delete(self):
-        """
-        用于删除这条消息。
-        """
         try:
             for x in self.result:
                 await x.delete()
@@ -38,7 +34,10 @@ class MessageSession(MessageSessionT):
         embed = False
         forward = False
         delete = True
+        markdown = False
         quote = True
+        rss = True
+        typing = False
         wait = True
 
     async def send_message(self, message_chain, quote=True, disable_secret_check=False,
@@ -160,14 +159,14 @@ class FetchTarget(FetchTargetT):
 
     @staticmethod
     async def fetch_target(target_id, sender_id=None) -> Union[Bot.FetchedSession]:
-        target_pattern = r'|'.join(re.escape(item) for item in target_name_list)
+        target_pattern = r'|'.join(re.escape(item) for item in target_prefix_list)
         match_target = re.match(fr'^({target_pattern})\|(.*)', target_id)
 
         if match_target:
             target_from = sender_from = match_target.group(1)
             target_id = match_target.group(2)
             if sender_id:
-                sender_pattern = r'|'.join(re.escape(item) for item in sender_name_list)
+                sender_pattern = r'|'.join(re.escape(item) for item in sender_prefix_list)
                 match_sender = re.match(fr'^({sender_pattern})\|(.*)', sender_id)
                 if match_sender:
                     sender_from = match_sender.group(1)
@@ -183,13 +182,12 @@ class FetchTarget(FetchTargetT):
         for x in target_list:
             fet = await FetchTarget.fetch_target(x)
             if fet:
-                if BotDBUtil.TargetInfo(fet.target.target_id).is_muted:
-                    continue
                 lst.append(fet)
         return lst
 
     @staticmethod
     async def post_message(module_name, message, user_list: List[Bot.FetchedSession] = None, i18n=False, **kwargs):
+        module_name = None if module_name == '*' else module_name
         if user_list:
             for x in user_list:
                 try:
@@ -201,15 +199,17 @@ class FetchTarget(FetchTargetT):
                             msgchain = MessageChain([Plain(message)])
                     msgchain = MessageChain(msgchain)
                     await x.send_direct_message(msgchain)
-                    if enable_analytics:
+                    if enable_analytics and module_name:
                         BotDBUtil.Analytics(x).add('', module_name, 'schedule')
                 except Exception:
                     Logger.error(traceback.format_exc())
         else:
-            get_target_id = BotDBUtil.TargetInfo.get_enabled_this(module_name, "Telegram")
+            get_target_id = BotDBUtil.TargetInfo.get_target_list(module_name, "Telegram")
             for x in get_target_id:
                 fetch = await FetchTarget.fetch_target(x.targetId)
                 if fetch:
+                    if BotDBUtil.TargetInfo(fetch.target.target_id).is_muted:
+                        continue
                     try:
                         msgchain = message
                         if isinstance(message, str):
@@ -219,12 +219,14 @@ class FetchTarget(FetchTargetT):
                                 msgchain = MessageChain([Plain(message)])
                         msgchain = MessageChain(msgchain)
                         await fetch.send_direct_message(msgchain)
-                        if enable_analytics:
+                        if enable_analytics and module_name:
                             BotDBUtil.Analytics(fetch).add('', module_name, 'schedule')
                     except Exception:
                         Logger.error(traceback.format_exc())
 
+    async def post_global_message(message, user_list: List[Bot.FetchedSession] = None, i18n=False, **kwargs):
+        await FetchTarget.post_message('*', message=message, user_list=user_list, i18n=i18n, **kwargs)
+
 
 Bot.MessageSession = MessageSession
 Bot.FetchTarget = FetchTarget
-Bot.client_name = client_name

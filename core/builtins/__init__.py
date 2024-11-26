@@ -2,15 +2,17 @@ import asyncio
 from typing import Union, List
 
 from core.config import Config
+from core.constants.info import Info
+from core.database import BotDBUtil
 from core.loader import ModulesManager
 from core.types.message import FetchTarget, FetchedSession as FetchedSessionT, MsgInfo, Session, ModuleHookContext
-from core.database import BotDBUtil
 from .message import *
 from .message.chain import *
 from .message.internal import *
 from .tasks import *
 from .temp import *
 from .utils import *
+from ..constants import base_superuser_default
 from ..logger import Logger
 
 
@@ -21,6 +23,7 @@ class Bot:
     FetchedSession = FetchedSessionT
     ModuleHookContext = ModuleHookContext
     ExecutionLockList = ExecutionLockList
+    Info = Info
 
     @staticmethod
     async def send_message(target: Union[FetchedSessionT, MessageSession, str], msg: Union[MessageChain, list],
@@ -41,7 +44,7 @@ class Bot:
 
     @staticmethod
     async def get_enabled_this_module(module: str) -> List[FetchedSessionT]:
-        lst = BotDBUtil.TargetInfo.get_enabled_this(module)
+        lst = BotDBUtil.TargetInfo.get_target_list(module)
         fetched = []
         for x in lst:
             x = Bot.FetchTarget.fetch_target(x)
@@ -63,7 +66,7 @@ class Bot:
                             await asyncio.create_task(hook.function(Bot.FetchTarget, ModuleHookContext(args)))
                         return
 
-                raise ValueError("Invalid module name")
+                raise ValueError(f"Invalid module name {module_or_hook_name}")
             else:
                 if module_or_hook_name:
                     if module_or_hook_name in ModulesManager.modules_hooks:
@@ -71,7 +74,7 @@ class Bot:
                                                                                                     ModuleHookContext(
                                                                                                         args)))
                         return
-                raise ValueError("Invalid hook name")
+                raise ValueError(f"Invalid hook name {module_or_hook_name}")
 
 
 class FetchedSession(FetchedSessionT):
@@ -84,7 +87,7 @@ class FetchedSession(FetchedSessionT):
                               sender_id=f'{sender_from}|{sender_id}',
                               target_from=target_from,
                               sender_from=sender_from,
-                              sender_name='',
+                              sender_prefix='',
                               client_name=Bot.client_name,
                               message_id=0,
                               reply_id=None)
@@ -96,7 +99,7 @@ class FetchedSession(FetchedSessionT):
 
 Bot.FetchedSession = FetchedSession
 
-base_superuser_list = Config("base_superuser", cfg_type=(str, list))
+base_superuser_list = Config("base_superuser", base_superuser_default, cfg_type=(str, list))
 
 if isinstance(base_superuser_list, str):
     base_superuser_list = [base_superuser_list]

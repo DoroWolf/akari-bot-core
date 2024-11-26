@@ -1,11 +1,11 @@
-from core.config import Config, CFG
 from core.builtins import Bot
 from core.component import module
-from core.exceptions import InvalidHelpDocTypeError
+from core.constants.exceptions import InvalidHelpDocTypeError
+from core.config import Config, CFGManager
+from core.database import BotDBUtil
 from core.loader import ModulesManager, current_unloaded_modules, err_modules
 from core.parser.command import CommandParser
 from core.utils.i18n import load_locale_file
-from core.database import BotDBUtil
 from .help import modules_list_help
 
 m = module('module',
@@ -33,7 +33,7 @@ m = module('module',
            exclude_from=['QQ|Guild'])
 @m.command(['enable [-g] <module> ... {{core.help.module.enable}}',
             'enable all [-g] {{core.help.module.enable_all}}',
-            'disable [-g]  <module> ... {{core.help.module.disable}}',
+            'disable [-g] <module> ... {{core.help.module.disable}}',
             'disable all [-g] {{core.help.module.disable_all}}',
             'list [--legacy] {{core.help.module.list}}'],
            options_desc={'-g': '{core.help.option.module.g}', '--legacy': '{help.option.legacy}'},
@@ -72,6 +72,8 @@ async def config_modules(msg: Bot.MessageSession):
                     continue
                 if modules_[function].base or modules_[function].hidden or modules_[function].required_superuser:
                     continue
+                if modules_[function].rss and not msg.Feature.rss:
+                    continue
                 enable_list.append(function)
         else:
             for module_ in wait_config_list:
@@ -82,6 +84,8 @@ async def config_modules(msg: Bot.MessageSession):
                         msglist.append(msg.locale.t("parser.superuser.permission.denied"))
                     elif modules_[module_].base:
                         msglist.append(msg.locale.t("core.message.module.enable.already", module=module_))
+                    elif modules_[module_].rss and not msg.Feature.rss:
+                        msglist.append(msg.locale.t("core.message.module.enable.unsupported_rss"))
                     else:
                         enable_list.append(module_)
                         recommend = modules_[module_].recommend_modules
@@ -202,7 +206,7 @@ async def config_modules(msg: Bot.MessageSession):
                 unloaded_list = Config('unloaded_modules', [])
                 if unloaded_list and module_ in unloaded_list:
                     unloaded_list.remove(module_)
-                    CFG.write('unloaded_modules', unloaded_list)
+                    CFGManager.write('unloaded_modules', unloaded_list)
                 msglist.append(module_reload(module_, extra_reload_modules, base_module))
 
         locale_err = load_locale_file()
@@ -218,7 +222,7 @@ async def config_modules(msg: Bot.MessageSession):
                 unloaded_list = Config('unloaded_modules', [])
                 if unloaded_list and module_ in unloaded_list:
                     unloaded_list.remove(module_)
-                    CFG.write('unloaded_modules', unloaded_list)
+                    CFGManager.write('unloaded_modules', unloaded_list)
             else:
                 msglist.append(msg.locale.t("core.message.module.load.failed"))
     elif msg.parsed_msg.get('unload', False):
@@ -231,7 +235,7 @@ async def config_modules(msg: Bot.MessageSession):
                             unloaded_list = []
                         if module_ not in unloaded_list:
                             unloaded_list.append(module_)
-                            CFG.write('unloaded_modules', unloaded_list)
+                            CFGManager.write('unloaded_modules', unloaded_list)
                         msglist.append(msg.locale.t("core.message.module.unload.success", module=module_))
                         err_modules.remove(module_)
                         current_unloaded_modules.append(module_)
@@ -250,7 +254,7 @@ async def config_modules(msg: Bot.MessageSession):
                     if not unloaded_list:
                         unloaded_list = []
                     unloaded_list.append(module_)
-                    CFG.write('unloaded_modules', unloaded_list)
+                    CFGManager.write('unloaded_modules', unloaded_list)
             else:
                 await msg.finish()
 

@@ -1,9 +1,9 @@
 import orjson as json
-from sqlalchemy import text
+from sqlalchemy import text, update
 
 from core.database import BotDBUtil
 from core.database.orm import Session
-from core.database.tables import DBVersion, TargetInfo, is_mysql
+from core.database.tables import DBVersion, TargetInfoTable, is_mysql, AnalyticsData
 
 
 def update_database():
@@ -12,8 +12,8 @@ def update_database():
     version = session.query(DBVersion).first()
     value = int(version.value)
     if value < 2:
-        TargetInfo.__table__.drop(engine)
-        TargetInfo.__table__.create(engine)
+        TargetInfoTable.__table__.drop(engine)
+        TargetInfoTable.__table__.create(engine)
         q = session.execute(text("SELECT * FROM enabledModules"))
         for v in q.fetchall():
             data = BotDBUtil.TargetInfo(v[0]).init()
@@ -62,4 +62,24 @@ def update_database():
             session.execute(
                 text("ALTER TABLE module_wiki_WikiInfo MODIFY COLUMN siteInfo LONGTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"))
         version.value = '5'
+        session.commit()
+    if value < 6:
+        mappings = []
+        i = 0
+        for v in session.query(AnalyticsData).all():
+            mappings.append({'id': v.id, 'command': '*'.join(v.command[::2])})
+            i += 1
+            print(v.id, i)
+            if i % 5000 == 0:
+                session.execute(update(AnalyticsData), mappings)
+                print('done')
+                session.commit()
+                mappings.clear()
+                session.flush()
+                i = 0
+        session.execute(update(AnalyticsData), mappings)
+        mappings.clear()
+        session.commit()
+        session.flush()
+        version.value = '6'
         session.commit()

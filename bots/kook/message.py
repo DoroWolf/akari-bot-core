@@ -8,17 +8,22 @@ from khl import MessageTypes, Message
 
 from bots.kook.client import bot
 from bots.kook.info import *
-from core.config import Config
 from core.builtins import Bot, Plain, Image, Voice, MessageSession as MessageSessionT, I18NContext, MessageTaskManager
 from core.builtins.message.chain import MessageChain
-from core.logger import Logger
-from core.types import FetchTarget as FetchTargetT, \
-    FinishedSession as FinS
+from core.config import Config
 from core.database import BotDBUtil
+from core.logger import Logger
+from core.types import FetchTarget as FetchTargetT, FinishedSession as FinishedSessionT
 
 enable_analytics = Config('enable_analytics', False)
 kook_base = "https://www.kookapp.cn"
-kook_headers = {f'Authorization': f"Bot {Config('kook_token', cfg_type=str)}"}
+kook_headers = {
+    f'Authorization': f"Bot {
+        Config(
+            'kook_token',
+            cfg_type=str,
+            secret=True,
+            table_name='bot_kook')}"}
 
 
 async def direct_msg_delete(msg_id: str):
@@ -41,11 +46,8 @@ async def channel_msg_delete(msg_id: str):
     return res
 
 
-class FinishedSession(FinS):
+class FinishedSession(FinishedSessionT):
     async def delete(self):
-        """
-        用于删除这条消息。
-        """
         try:
             for x in self.result:
                 for y in self.result[x]:
@@ -64,7 +66,10 @@ class MessageSession(MessageSessionT):
         embed = False
         forward = False
         delete = True
+        markdown = True
         quote = True
+        rss = True
+        typing = True
         wait = True
 
     async def send_message(self, message_chain, quote=True, disable_secret_check=False,
@@ -174,11 +179,11 @@ class MessageSession(MessageSessionT):
 class FetchedSession(Bot.FetchedSession):
 
     async def send_direct_message(self, message_chain, disable_secret_check=False, enable_parse_message=True, enable_split_image=True):
-        if self.target.target_from == target_group_name:
+        if self.target.target_from == target_group_prefix:
             get_channel = await bot.client.fetch_public_channel(self.session.target)
             if not get_channel:
                 return False
-        elif self.target.target_from == target_person_name:
+        elif self.target.target_from == target_person_prefix:
             get_channel = await bot.client.fetch_user(self.session.target)
             Logger.debug(f'get_channel: {get_channel}')
             if not get_channel:
@@ -187,7 +192,8 @@ class FetchedSession(Bot.FetchedSession):
             return False
 
         message_chain = MessageChain(message_chain)
-
+        if not message_chain.is_safe and not disable_secret_check:
+            await self.send_direct_message(I18NContext("error.message.chain.unsafe"))
         for x in message_chain.as_sendable(self.parent, embed=False):
             if isinstance(x, Plain):
                 await get_channel.send(x.text)
@@ -211,13 +217,13 @@ class FetchTarget(FetchTargetT):
 
     @staticmethod
     async def fetch_target(target_id, sender_id=None) -> Union[Bot.FetchedSession]:
-        target_pattern = r'|'.join(re.escape(item) for item in target_name_list)
+        target_pattern = r'|'.join(re.escape(item) for item in target_prefix_list)
         match_target = re.match(fr'^({target_pattern})\|(.*)', target_id)
         if match_target:
             target_from = sender_from = match_target.group(1)
             target_id = match_target.group(2)
             if sender_id:
-                sender_pattern = r'|'.join(re.escape(item) for item in sender_name_list)
+                sender_pattern = r'|'.join(re.escape(item) for item in sender_prefix_list)
                 match_sender = re.match(fr'^({sender_pattern})\|(.*)', sender_id)
                 if match_sender:
                     sender_from = match_sender.group(1)
@@ -233,13 +239,12 @@ class FetchTarget(FetchTargetT):
         for x in target_list:
             fet = await FetchTarget.fetch_target(x)
             if fet:
-                if BotDBUtil.TargetInfo(fet.target.target_id).is_muted:
-                    continue
                 lst.append(fet)
         return lst
 
     @staticmethod
     async def post_message(module_name, message, user_list: List[Bot.FetchedSession] = None, i18n=False, **kwargs):
+        module_name = None if module_name == '*' else module_name
         if user_list:
             for x in user_list:
                 try:
@@ -251,15 +256,17 @@ class FetchTarget(FetchTargetT):
                             msgchain = MessageChain([Plain(message)])
                     msgchain = MessageChain(msgchain)
                     await x.send_direct_message(msgchain)
-                    if enable_analytics:
+                    if enable_analytics and module_name:
                         BotDBUtil.Analytics(x).add('', module_name, 'schedule')
                 except Exception:
                     Logger.error(traceback.format_exc())
         else:
-            get_target_id = BotDBUtil.TargetInfo.get_enabled_this(module_name, "KOOK")
+            get_target_id = BotDBUtil.TargetInfo.get_target_list(module_name, "KOOK")
             for x in get_target_id:
                 fetch = await FetchTarget.fetch_target(x.targetId)
                 if fetch:
+                    if BotDBUtil.TargetInfo(fetch.target.target_id).is_muted:
+                        continue
                     try:
                         msgchain = message
                         if isinstance(message, str):
@@ -269,10 +276,13 @@ class FetchTarget(FetchTargetT):
                                 msgchain = MessageChain([Plain(message)])
                         msgchain = MessageChain(msgchain)
                         await fetch.send_direct_message(msgchain)
-                        if enable_analytics:
+                        if enable_analytics and module_name:
                             BotDBUtil.Analytics(fetch).add('', module_name, 'schedule')
                     except Exception:
                         Logger.error(traceback.format_exc())
+
+    async def post_global_message(message, user_list: List[Bot.FetchedSession] = None, i18n=False, **kwargs):
+        await FetchTarget.post_message('*', message=message, user_list=user_list, i18n=i18n, **kwargs)
 
 
 Bot.MessageSession = MessageSession

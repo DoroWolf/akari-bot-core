@@ -3,19 +3,19 @@ from __future__ import annotations
 import asyncio
 from typing import List, Union, Dict, Coroutine, Awaitable, Any
 
-from core.exceptions import FinishedException
+from core.constants.exceptions import FinishedException
 from .chain import MessageChain
 from .internal import Plain, Image, Voice, Embed, Url, ErrorMessage
 
 
 class MsgInfo:
-    __slots__ = ["target_id", "sender_id", "sender_name", "target_from", "sender_info", "sender_from", "client_name",
+    __slots__ = ["target_id", "sender_id", "sender_prefix", "target_from", "sender_info", "sender_from", "client_name",
                  "message_id", "reply_id"]
 
     def __init__(self,
                  target_id: Union[int, str],
                  sender_id: Union[int, str],
-                 sender_name: str,
+                 sender_prefix: str,
                  target_from: str,
                  sender_from: str,
                  client_name: str,
@@ -23,7 +23,7 @@ class MsgInfo:
                  reply_id: Union[int, str] = None):
         self.target_id = target_id
         self.sender_id = sender_id
-        self.sender_name = sender_name
+        self.sender_prefix = sender_prefix
         self.target_from = target_from
         self.sender_from = sender_from
         self.client_name = client_name
@@ -31,7 +31,7 @@ class MsgInfo:
         self.reply_id = reply_id
 
     def __repr__(self):
-        return f'MsgInfo(target_id={self.target_id}, sender_id={self.sender_id}, sender_name={self.sender_name},' \
+        return f'MsgInfo(target_id={self.target_id}, sender_id={self.sender_id}, sender_prefix={self.sender_prefix},' \
             f' target_from={self.target_from}, sender_from={self.sender_from}, client_name={self.client_name}, ' \
             f'message_id={self.message_id}, reply_id={self.reply_id})'
 
@@ -309,7 +309,10 @@ class MessageSession:
         embed = ...
         forward = ...
         delete = ...
+        markdown = ...
         quote = ...
+        rss = ...
+        typing = ...
         wait = ...
 
     def __str__(self):
@@ -326,7 +329,7 @@ class FetchedSession:
                               sender_id=f'{target_from}|{sender_id}',
                               target_from=target_from,
                               sender_from=sender_from,
-                              sender_name='', client_name='', reply_id=None, message_id=0)
+                              sender_prefix='', client_name='', reply_id=None, message_id=0)
         self.session = Session(message=False, target=target_id, sender=sender_id)
         self.parent = MessageSession(self.target, self.session)
 
@@ -351,7 +354,7 @@ class FetchTarget:
     name = ''
 
     @staticmethod
-    async def fetch_target(target_id, sender_id=None) -> FetchedSession:
+    async def fetch_target(target_id: str, sender_id=None) -> FetchedSession:
         """
         尝试从数据库记录的对象ID中取得对象消息会话，实际此会话中的消息文本会被设为False（因为本来就没有）。
         """
@@ -365,7 +368,7 @@ class FetchTarget:
         raise NotImplementedError
 
     @staticmethod
-    async def post_message(module_name, message, user_list: List[FetchedSession] = None, i18n=False, **kwargs):
+    async def post_message(module_name: str, message, user_list: List[FetchedSession] = None, i18n=False, **kwargs):
         """
         尝试向开启此模块的对象发送一条消息。
         :param module_name: 模块名
@@ -374,6 +377,19 @@ class FetchTarget:
         :param i18n: 是否使用i18n，若为True则message为i18n的key（或为指定语言的dict映射表（k=语言，v=文本））
         """
         raise NotImplementedError
+
+    @staticmethod
+    async def post_global_message(message, user_list: List[FetchedSession] = None, i18n=False, **kwargs):
+        """
+        尝试向所有对象发送一条消息。
+        :param message: 消息文本
+        :param user_list: 用户列表
+        :param i18n: 是否使用i18n，若为True则message为i18n的key（或为指定语言的dict映射表（k=语言，v=文本））
+        """
+        raise NotImplementedError
+
+    postMessage = post_message
+    postGlobalMessage = post_global_message
 
 
 class ModuleHookContext:

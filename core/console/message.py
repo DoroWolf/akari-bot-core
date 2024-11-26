@@ -1,25 +1,22 @@
 import asyncio
 from typing import List, Union
 
-from PIL import Image as PILImage
 from inputimeout import inputimeout, TimeoutOccurred
+from PIL import Image as PILImage
 
-from core.config import Config
 from core.builtins import (Plain, I18NContext, Image, confirm_command, Bot, FetchTarget as FetchTargetT,
                            FetchedSession as FetchedSessionT)
 from core.builtins.message import MessageSession as MessageSessionT
 from core.builtins.message.chain import MessageChain
+from core.config import Config
 from core.console.info import *
-from core.exceptions import WaitCancelException
+from core.constants.exceptions import WaitCancelException
 from core.logger import Logger
 from core.types import Session, MsgInfo, FinishedSession as FinS
 
 
 class FinishedSession(FinS):
     async def delete(self):
-        """
-        用于删除这条消息。
-        """
         print("(Tried to delete message, but I'm a console so I cannot do it :< )")
 
 
@@ -29,8 +26,13 @@ class MessageSession(MessageSessionT):
     class Feature:
         image = True
         voice = False
+        embed = False
         forward = False
-        delete = True
+        delete = False
+        markdown = True
+        quote = False
+        rss = True
+        typing = True
         wait = True
 
     async def send_message(self, message_chain, quote=True, disable_secret_check=False,
@@ -111,15 +113,15 @@ class MessageSession(MessageSessionT):
             raise WaitCancelException
         if message_chain and delete:
             await send.delete()
-        return MessageSession(target=MsgInfo(target_id=f'{target_name}|0',
-                                             sender_id=f'{sender_name}|0',
-                                             sender_name='Console',
-                                             target_from=target_name,
-                                             sender_from=sender_name,
+        return MessageSession(target=MsgInfo(target_id=f'{target_prefix}|0',
+                                             sender_id=f'{sender_prefix}|0',
+                                             sender_prefix='Console',
+                                             target_from=target_prefix,
+                                             sender_from=sender_prefix,
                                              client_name=client_name,
                                              message_id=0,
                                              reply_id=None),
-                              session=Session(message=c, target=f'{target_name}|0', sender=f'{sender_name}|0'))
+                              session=Session(message=c, target=f'{target_prefix}|0', sender=f'{sender_prefix}|0'))
 
     async def wait_anyone(self, message_chain=None, quote=True, delete=False, timeout=120):
         send = None
@@ -205,9 +207,9 @@ class FetchTarget(FetchTargetT):
 
     @staticmethod
     async def fetch_target(target_id, sender_id=None) -> FetchedSession:
-        return FetchedSession(target_from=target_name,
+        return FetchedSession(target_from=target_prefix,
                               target_id='0',
-                              sender_from=sender_name,
+                              sender_from=sender_prefix,
                               sender_id='0')
 
     @staticmethod

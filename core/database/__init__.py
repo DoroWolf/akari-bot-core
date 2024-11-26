@@ -4,12 +4,14 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Union, List
 
 import orjson as json
+from sqlalchemy import func
 from tenacity import retry, stop_after_attempt
 
-from core.types.message import MessageSession, FetchTarget, FetchedSession
-from core.utils.text import isint
+from core.constants import database_version
 from core.database.orm import Session
 from core.database.tables import *
+from core.utils.text import isint
+from core.types.message import MessageSession, FetchTarget, FetchedSession
 
 session = Session.session
 
@@ -26,7 +28,7 @@ def auto_rollback_error(func):
 
 
 class BotDBUtil:
-    database_version = 5
+    database_version = database_version
     time_offset = None
 
     class TargetInfo:
@@ -39,13 +41,13 @@ class BotDBUtil:
 
         @property
         def query_data(self):
-            return session.query(TargetInfo).filter_by(targetId=self.target_id).first()
+            return session.query(TargetInfoTable).filter_by(targetId=self.target_id).first()
 
         @retry(stop=stop_after_attempt(3))
         @auto_rollback_error
         def init(self):
             if not self.query:
-                session.add_all([TargetInfo(targetId=self.target_id)])
+                session.add_all([TargetInfoTable(targetId=self.target_id)])
                 session.commit()
                 return self.query_data
             else:
@@ -198,11 +200,13 @@ class BotDBUtil:
             return self.query.locale
 
         @staticmethod
-        def get_enabled_this(module_name, id_prefix=None) -> List[TargetInfo]:
-            filter_ = [TargetInfo.enabledModules.like(f'%"{module_name}"%')]
+        def get_target_list(module_name=None, id_prefix=None) -> List[TargetInfoTable]:
+            filter_ = []
+            if module_name:
+                filter_.append(TargetInfoTable.enabledModules.like(f'%"{module_name}"%'))
             if id_prefix:
-                filter_.append(TargetInfo.targetId.like(f'{id_prefix}%'))
-            return session.query(TargetInfo).filter(*filter_).all()
+                filter_.append(TargetInfoTable.targetId.like(f'{id_prefix}%'))
+            return session.query(TargetInfoTable).filter(*filter_).all()
 
     class SenderInfo:
         def __init__(self, sender_id):
@@ -294,6 +298,13 @@ class BotDBUtil:
             session.expire_all()
             return True
 
+        @staticmethod
+        def get_sender_list(id_prefix=None) -> List[SenderInfo]:
+            filter_ = []
+            if id_prefix:
+                filter_.append(SenderInfo.id.like(f'{id_prefix}%'))
+            return session.query(SenderInfo).filter(*filter_).all()
+
     class GroupBlockList:
         @staticmethod
         @retry(stop=stop_after_attempt(3))
@@ -347,7 +358,7 @@ class BotDBUtil:
 
         @retry(stop=stop_after_attempt(3))
         @auto_rollback_error
-        def update(self, name, value: str):
+        def update(self, name, value: Union[str, bytes]):
             exists = self.get(name)
             if not exists:
                 self.add(name=name, value=value)
@@ -365,7 +376,7 @@ class BotDBUtil:
         def add(self, command, module_name, module_type):
             session.add(AnalyticsData(targetId=self.target.target.target_id,
                                       senderId=self.target.target.sender_id,
-                                      command=command,
+                                      command='*'.join(command[::2]),
                                       moduleName=module_name, moduleType=module_type))
             session.commit()
 
@@ -390,6 +401,15 @@ class BotDBUtil:
             if module_name:
                 filter_.append(AnalyticsData.moduleName == module_name)
             return session.query(AnalyticsData).filter(*filter_).count()
+
+        @staticmethod
+        def get_modules_count():
+            results = session.query(
+                AnalyticsData.moduleName, func.count(
+                    AnalyticsData.id)).group_by(
+                AnalyticsData.moduleName).all()
+            modules_count = {module_name: count for module_name, count in results}
+            return modules_count
 
     class UnfriendlyActions:
         def __init__(self, target_id, sender_id):

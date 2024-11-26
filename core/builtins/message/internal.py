@@ -1,8 +1,7 @@
 import base64
-import random
 import os
+import random
 import re
-import uuid
 from datetime import datetime, timezone
 from typing import List, Self
 from urllib import parse
@@ -13,13 +12,14 @@ from PIL import Image as PILImage
 from tenacity import retry, stop_after_attempt
 
 from core.config import Config
+from core.constants.default import bug_report_url_default
+from core.joke import joke
 from core.types.message import MessageSession
 from core.types.message.internal import (Plain as PlainT, Image as ImageT, Voice as VoiceT, Embed as EmbedT,
                                          FormattedTime as FormattedTimeT, I18NContext as I18NContextT,
                                          EmbedField as EmbedFieldT, Url as UrlT, ErrorMessage as EMsg)
 from core.utils.cache import random_cache_path
 from core.utils.i18n import Locale
-from core.utils.joke import joke
 
 
 class Plain(PlainT):
@@ -138,9 +138,9 @@ class ErrorMessage(EMsg):
             locale = Locale(locale)
             error_message = locale.t_str(error_message, **kwargs)
             self.error_message = locale.t('message.error') + error_message
-            if enable_report and Config('bug_report_url', cfg_type=str):
-                self.error_message += '\n' + locale.t('error.prompt.address',
-                                                      url=str(Url(Config('bug_report_url', cfg_type=str))))
+            if enable_report and Config('bug_report_url', bug_report_url_default, cfg_type=str):
+                self.error_message += '\n' + \
+                    locale.t('error.prompt.address', url=str(Url(Config('bug_report_url', bug_report_url_default, cfg_type=str))))
 
     def __str__(self):
         return self.error_message
