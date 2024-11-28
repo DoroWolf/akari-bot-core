@@ -22,7 +22,7 @@ from core.utils.i18n import Locale
 from core.utils.info import Info
 from core.utils.message import remove_duplicate_space
 
-qq_account = int(Config("qq_account", qq_account_default, cfg_type=(int, str)))
+qq_account = int(Config("qq_account", qq_account_default, cfg_type=(int, str), table_name='bot_aiocqhttp'))
 
 default_locale = Config("default_locale", cfg_type=str)
 enable_tos = Config('enable_tos', True)
@@ -448,7 +448,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                     if msg.target.target_from == qq_group_name:  # wtf onebot 11
                         if qq_frame_type() == 'ntqq':
                             await msg.call_api('set_msg_emoji_like', message_id=msg.session.message.message_id,
-                                               emoji_id=str(Config('qq_limited_emoji', 10060, (str, int))))
+                                               emoji_id=str(Config('qq_limited_emoji', 10060, (str, int), table_name='bot_aiocqhttp')))
                         elif qq_frame_type() == 'lagrange':
                             await msg.call_api('group_poke', group_id=msg.session.target, user_id=qq_account)
                         elif qq_frame_type() == 'shamrock':
@@ -643,7 +643,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                 if msg.target.target_from == qq_group_name:  # wtf onebot 11
                     if qq_frame_type() == 'ntqq':
                         await msg.call_api('set_msg_emoji_like', message_id=msg.session.message.message_id,
-                                           emoji_id=str(Config('qq_limited_emoji', 10060, (str, int))))
+                                           emoji_id=str(Config('qq_limited_emoji', 10060, (str, int), table_name='bot_aiocqhttp')))
                     elif qq_frame_type() == 'lagrange':
                         await msg.call_api('group_poke', group_id=msg.session.target, user_id=qq_account)
                     elif qq_frame_type() == 'shamrock':
