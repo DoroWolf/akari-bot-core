@@ -1,7 +1,7 @@
 <div align="center">
   <img width="512" src="./assets/character_marked.png" alt="logo">
 
-# 小可 · AkariBot v4
+# 小可 · AkariBot
 
 _多功能、多语言、多平台支持的异步聊天机器人_
 
