@@ -8,7 +8,7 @@ _多功能、多语言、多平台支持的异步聊天机器人_
 [![GitHub issues](https://img.shields.io/github/issues/Teahouse-Studios/akari-bot)](https://github.com/Teahouse-Studios/akari-bot/issues)
 [![GitHub pull requests](https://img.shields.io/github/issues-pr/Teahouse-Studios/akari-bot)](https://github.com/Teahouse-Studios/akari-bot/pulls)<!--![GitHub tag](https://img.shields.io/github/v/tag/Teahouse-Studios/akari-bot?include_prereleases)-->
 [![Crowdin](https://badges.crowdin.net/akari-bot/localized.svg)](https://crowdin.com/project/akari-bot)
-![GitHub Repo stars](https://img.shields.io/github/stars/Teahouse-Studios/akari-bot?style=social)
+![GitHub Repo stars](https://img.shields.io/github/stars/Teahouse-Studios/akari-bot-core?style=social)
 <br>
 ![Python](https://img.shields.io/badge/Python-3.12+-blue)
 ![OneBot v11](https://img.shields.io/badge/OneBot-v11-black)
