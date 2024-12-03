@@ -452,7 +452,7 @@ async def parser(msg: Bot.MessageSession,
                             await msg.call_api('set_msg_emoji_like', message_id=msg.session.message.message_id,
                                                emoji_id=str(Config('qq_limited_emoji', 10060, (str, int), table_name='bot_aiocqhttp')))
                         elif obi == 'lagrange':
-                            await msg.call_api('group_poke', group_id=msg.session.target, user_id=qq_account)
+                            await msg.call_api('group_poke', group_id=msg.session.target, user_id=int(qq_account))
                         elif obi == 'shamrock':
                             await msg.call_api('send_group_msg', group_id=msg.session.target, message=f'[CQ:touch,id={qq_account}]')
                         elif obi == 'go-cqhttp':
@@ -654,7 +654,7 @@ async def parser(msg: Bot.MessageSession,
                         await msg.call_api('set_msg_emoji_like', message_id=msg.session.message.message_id,
                                            emoji_id=str(Config('qq_limited_emoji', 10060, (str, int), table_name='bot_aiocqhttp')))
                     elif obi == 'lagrange':
-                        await msg.call_api('group_poke', group_id=msg.session.target, user_id=qq_account)
+                        await msg.call_api('group_poke', group_id=msg.session.target, user_id=int(qq_account))
                     elif obi == 'shamrock':
                         await msg.call_api('send_group_msg', group_id=msg.session.target, message=f'[CQ:touch,id={qq_account}]')
                     elif obi == 'go-cqhttp':
