@@ -6,9 +6,9 @@ from loguru import logger
 from tomlkit import parse as toml_parser, dumps as toml_dumps, document as toml_document, comment as toml_comment, nl
 from tomlkit.exceptions import KeyAlreadyPresent
 
+from core.constants import config_filename, config_version
 from core.constants.exceptions import ConfigFileNotFound
 from core.constants.path import config_path
-from core.constants import config_filename, config_version
 from core.utils.i18n import Locale
 from core.utils.text import isint, isfloat
 
@@ -94,7 +94,7 @@ if 'initialized' not in config.value:
                 table = cfg_name + '_secret' if secret else cfg_name
 
                 if key in old_config[c_target]:
-                    if cfg_name not in configs.keys():
+                    if cfg_name not in configs:
                         configs[cfg_name] = toml_document()
                         configs[cfg_name].add(
                             toml_comment(
@@ -161,7 +161,7 @@ if 'initialized' not in config.value:
                 except KeyAlreadyPresent:
                     configs[cfg_name][cfg_name]['enable'] = True
                 finally:
-                    qc = f'config.comments.enable'
+                    qc = 'config.comments.enable'
                     # get the comment for the key from locale
                     localed_comment = old_locale.t(qc, fallback_failed_prompt=False)
                     if localed_comment != qc:
@@ -175,11 +175,11 @@ if 'initialized' not in config.value:
         Reorganize.table = 'aiocqhttp'
         Reorganize.bot_add_enabled_flag()
         Reorganize.reorganize_bot_key("qq_account")
+        Reorganize.reorganize_bot_key("qq_access_token", True)
         Reorganize.reorganize_bot_key("qq_allow_approve_friend")
         Reorganize.reorganize_bot_key("qq_allow_approve_group_invite")
         Reorganize.reorganize_bot_key("qq_enable_listening_self_message")
-        Reorganize.reorganize_bot_key("qq_frame_type")
-        Reorganize.reorganize_bot_key("qq_host", True)
+        Reorganize.reorganize_bot_key("qq_host")
         Reorganize.reorganize_bot_key("qq_limited_emoji")
         Reorganize.reorganize_bot_key("qq_typing_emoji")
 
@@ -193,8 +193,8 @@ if 'initialized' not in config.value:
 
         Reorganize.table = 'api'
         Reorganize.bot_add_enabled_flag()
-        Reorganize.reorganize_bot_key('jwt_secret', True)
         Reorganize.reorganize_bot_key('api_port')
+        Reorganize.reorganize_bot_key('jwt_secret', True)
 
         # discord
 

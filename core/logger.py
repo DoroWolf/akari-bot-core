@@ -8,11 +8,9 @@ from loguru import logger
 from core.config import Config
 from core.constants.path import logs_path
 
-
 debug = Config('debug', False)
 
-if not os.path.exists(logs_path):
-    os.mkdir(logs_path)
+os.makedirs(logs_path, exist_ok=True)
 
 bot_name = re.split(r'[/\\]', sys.path[0])[-1]
 
@@ -34,12 +32,12 @@ class LoggingLogger:
     def __init__(self, name):
         self.log = logger
         self.log.remove()
-        self.info = None
-        self.error = None
-        self.debug = None
-        self.warning = None
-        self.exception = None
-        self.critical = None
+        self.info = logger.info
+        self.error = logger.error
+        self.debug = logger.debug
+        self.warning = logger.warning
+        self.exception = logger.exception
+        self.critical = logger.critical
 
         self.rename(name)
 

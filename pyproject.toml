@@ -60,6 +60,7 @@ jinja2 = "^3.1.4"
 qq-botpy = "^1.2.1"
 botpy = {git = "https://github.com/Teahouse-Studios/botpy.git"}
 tomlkit = "^0.13.2"
+cattrs = "^24.1.2"
 
 
 [tool.poetry.group.dev.dependencies]

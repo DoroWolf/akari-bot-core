@@ -3,14 +3,16 @@ import inspect
 import re
 import traceback
 from datetime import datetime
+from typing import Optional
 
-from bots.aiocqhttp.info import target_group_prefix as qq_group_name, target_guild_prefix as qq_guild_name
-from bots.aiocqhttp.utils import qq_frame_type
+from bots.aiocqhttp.info import target_group_prefix as qq_group_prefix, target_guild_prefix as qq_guild_prefix
+from bots.aiocqhttp.utils import get_onebot_implementation
 from core.builtins import command_prefix, ExecutionLockList, ErrorMessage, MessageTaskManager, Url, Bot, \
     base_superuser_list
 from core.config import Config
-from core.constants.default import bug_report_url_default, qq_account_default
-from core.constants.exceptions import AbuseWarning, FinishedException, InvalidCommandFormatError, InvalidHelpDocTypeError, \
+from core.constants.default import bug_report_url_default
+from core.constants.exceptions import AbuseWarning, FinishedException, InvalidCommandFormatError, \
+    InvalidHelpDocTypeError, \
     WaitCancelException, NoReportException, SendMessageFailed
 from core.database import BotDBUtil
 from core.loader import ModulesManager, current_unloaded_modules, err_modules
@@ -22,7 +24,7 @@ from core.utils.i18n import Locale
 from core.utils.info import Info
 from core.utils.message import remove_duplicate_space
 
-qq_account = int(Config("qq_account", qq_account_default, cfg_type=(int, str), table_name='bot_aiocqhttp'))
+qq_account = Config("qq_account", cfg_type=(int, str), table_name='bot_aiocqhttp')
 
 default_locale = Config("default_locale", cfg_type=str)
 enable_tos = Config('enable_tos', True)
@@ -101,10 +103,7 @@ async def temp_ban_check(msg: Bot.MessageSession):
 
 async def check_target_cooldown(msg: Bot.MessageSession):
     cooldown_time = int(msg.options.get('cooldown_time', 0))
-    if await msg.check_native_permission() or await msg.check_permission() or msg.check_super_user():
-        neutralized = True
-    else:
-        neutralized = False
+    neutralized = bool(await msg.check_native_permission() or await msg.check_permission() or msg.check_super_user())
 
     if cooldown_time and not neutralized:
         if cooldown_counter.get(msg.target.target_id, {}).get(msg.target.sender_id) is not None:
@@ -119,7 +118,7 @@ async def check_target_cooldown(msg: Bot.MessageSession):
 
 
 def transform_alias(msg, command: str):
-    aliases = {k: v for k, v in msg.options.get('command_alias').items()}
+    aliases = dict(msg.options.get('command_alias', {}).items())
     command_split = msg.trigger_msg.split(' ')  # 切割消息
     for pattern, replacement in aliases.items():
         if re.search(r'\${[^}]*}', pattern):
@@ -166,15 +165,17 @@ def transform_alias(msg, command: str):
 match_hash_cache = {}
 
 
-async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, prefix: list = None,
+async def parser(msg: Bot.MessageSession,
+                 require_enable_modules: bool = True,
+                 prefix: Optional[list] = None,
                  running_mention: bool = False):
     """
-    接收消息必经的预处理器
-    :param msg: 从监听器接收到的dict，该dict将会经过此预处理器传入下游
-    :param require_enable_modules: 是否需要检查模块是否已启用
-    :param prefix: 使用的命令前缀。如果为None，则使用默认的命令前缀，存在''值的情况下则代表无需命令前缀
-    :param running_mention: 消息内若包含机器人名称，则检查是否有命令正在运行
-    :return: 无返回
+    接收消息必经的预处理器。
+
+    :param msg: 从监听器接收到的dict，该dict将会经过此预处理器传入下游。
+    :param require_enable_modules: 是否需要检查模块是否已启用。
+    :param prefix: 使用的命令前缀。如果为None，则使用默认的命令前缀，存在空字符串的情况下则代表无需命令前缀。
+    :param running_mention: 消息内若包含机器人名称，则检查是否有命令正在运行。
     """
     identify_str = f'[{msg.target.sender_id}{
         f" ({msg.target.target_id})" if msg.target.target_from != msg.target.sender_from else ""}]'
@@ -268,7 +269,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
             msg.trigger_msg = command  # 触发该命令的消息，去除消息前缀
             command_first_word = command_split[0].lower()
 
-            mute = True if command_first_word == 'mute' else False
+            mute = command_first_word == 'mute'
 
             in_mute = msg.muted
             if in_mute and not mute:
@@ -314,11 +315,11 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                                                                 module=command_first_word))
                             return
 
-                    if not (msg.target.target_from == qq_guild_name or module.base):
+                    if not (msg.target.target_from == qq_guild_prefix or module.base):
                         if enable_tos:
                             await tos_msg_counter(msg, msg.trigger_msg)
                         else:
-                            Logger.debug(f'Tos is disabled, check the configuration if it is not work as expected.')
+                            Logger.debug('Tos is disabled, check the configuration if it is not work as expected.')
 
                     none_doc = True  # 检查模块绑定的命令是否有文档
                     for func in module.command_list.get(msg.target.target_from):
@@ -445,15 +446,16 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                                     await func.function(msg)
                                 raise FinishedException(msg.sent)  # if not using msg.finish
                 except SendMessageFailed:
-                    if msg.target.target_from == qq_group_name:  # wtf onebot 11
-                        if qq_frame_type() == 'ntqq':
+                    if msg.target.target_from == qq_group_prefix:  # wtf onebot 11
+                        obi = await get_onebot_implementation()
+                        if obi == 'ntqq':
                             await msg.call_api('set_msg_emoji_like', message_id=msg.session.message.message_id,
                                                emoji_id=str(Config('qq_limited_emoji', 10060, (str, int), table_name='bot_aiocqhttp')))
-                        elif qq_frame_type() == 'lagrange':
+                        elif obi == 'lagrange':
                             await msg.call_api('group_poke', group_id=msg.session.target, user_id=qq_account)
-                        elif qq_frame_type() == 'shamrock':
+                        elif obi == 'shamrock':
                             await msg.call_api('send_group_msg', group_id=msg.session.target, message=f'[CQ:touch,id={qq_account}]')
-                        elif qq_frame_type() == 'mirai':
+                        elif obi == 'go-cqhttp':
                             await msg.call_api('send_group_msg', group_id=msg.session.target, message=f'[CQ:poke,qq={qq_account}]')
                         else:
                             pass
@@ -487,7 +489,10 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
 
                     if Config('bug_report_url', bug_report_url_default, cfg_type=str):
                         errmsg += '\n' + msg.locale.t('error.prompt.address',
-                                                      url=str(Url(Config('bug_report_url', bug_report_url_default, cfg_type=str))))
+                                                      url=str(Url(Config('bug_report_url',
+                                                                         bug_report_url_default,
+                                                                         cfg_type=str),
+                                                                  use_mm=False)))
                     await msg.send_message(errmsg)
 
                     if not timeout and report_targets:
@@ -582,7 +587,7 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                                         await tos_msg_counter(msg, msg.trigger_msg)
                                     else:
                                         Logger.debug(
-                                            f'Tos is disabled, check the configuration if it is not work as expected.')
+                                            'Tos is disabled, check the configuration if it is not work as expected.')
 
                                 if not ExecutionLockList.check(msg):
                                     ExecutionLockList.add(msg)
@@ -628,7 +633,10 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
 
                             if Config('bug_report_url', bug_report_url_default, cfg_type=str):
                                 errmsg += '\n' + msg.locale.t('error.prompt.address',
-                                                              url=str(Url(Config('bug_report_url', bug_report_url_default, cfg_type=str))))
+                                                              url=str(Url(Config('bug_report_url',
+                                                                                 bug_report_url_default,
+                                                                                 cfg_type=str),
+                                                                          use_mm=False)))
                             await msg.send_message(errmsg)
 
                             if not timeout and report_targets:
@@ -640,15 +648,16 @@ async def parser(msg: Bot.MessageSession, require_enable_modules: bool = True, p
                             ExecutionLockList.remove(msg)
 
             except SendMessageFailed:
-                if msg.target.target_from == qq_group_name:  # wtf onebot 11
-                    if qq_frame_type() == 'ntqq':
+                if msg.target.target_from == qq_group_prefix:  # wtf onebot 11
+                    obi = await get_onebot_implementation()
+                    if obi == 'ntqq':
                         await msg.call_api('set_msg_emoji_like', message_id=msg.session.message.message_id,
                                            emoji_id=str(Config('qq_limited_emoji', 10060, (str, int), table_name='bot_aiocqhttp')))
-                    elif qq_frame_type() == 'lagrange':
+                    elif obi == 'lagrange':
                         await msg.call_api('group_poke', group_id=msg.session.target, user_id=qq_account)
-                    elif qq_frame_type() == 'shamrock':
+                    elif obi == 'shamrock':
                         await msg.call_api('send_group_msg', group_id=msg.session.target, message=f'[CQ:touch,id={qq_account}]')
-                    elif qq_frame_type() == 'mirai':
+                    elif obi == 'go-cqhttp':
                         await msg.call_api('send_group_msg', group_id=msg.session.target, message=f'[CQ:poke,qq={qq_account}]')
                     else:
                         pass
