@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '0 0 1 * *'
   workflow_dispatch:
-  
+
 jobs:
   sync-repo:
     runs-on: ubuntu-latest
@@ -21,6 +21,7 @@ jobs:
         with:
           repository: Teahouse-Studios/akari-bot-core
           path: akari-bot-core
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync directories and files
         run: |
@@ -45,12 +46,13 @@ jobs:
           git commit -m "Sync from source repository on $(date +'%Y-%m-%d')"
 
       - name: Push changes to new branch
+        id: push-changes
         run: |
           cd akari-bot-core
           branch_name="sync-$(date +'%Y%m%d')"
           git checkout -b $branch_name
           git push origin $branch_name
-
+          
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
@@ -60,3 +62,4 @@ jobs:
           body: |
             This pull request contains changes synchronized from the source repository.
             Please review and merge.
+          base: main
