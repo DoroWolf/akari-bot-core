@@ -28,7 +28,7 @@ jobs:
           rsync -av --exclude='api/' akari-bot/bots/ akari-bot-core/bots/
           rsync -av akari-bot/core/ akari-bot-core/core/
           rsync -av akari-bot/modules/core/ akari-bot-core/modules/core/
-          rsync -av akari-bot/schedulers/ akari-bot-core/schedulers/
+          cp akari-bot/schedulers/purge.py akari-bot-core/schedulers/
           cp akari-bot/bot.py akari-bot-core/
           cp akari-bot/console.py akari-bot-core/
 
