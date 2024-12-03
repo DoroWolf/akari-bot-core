@@ -2,27 +2,29 @@ name: Sync Directories and Files
 
 on:
   schedule:
-    - cron: '0 0 1 * *'
-  workflow_dispatch:
+    - cron: '0 0 1 * *'  # 每月1号执行
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
   sync-repo:
     runs-on: ubuntu-latest
 
     steps:
+      # 检出源仓库
       - name: Checkout Source repository
         uses: actions/checkout@v3
         with:
           repository: Teahouse-Studios/akari-bot
           path: akari-bot
 
+      # 检出目标仓库
       - name: Checkout Target repository
         uses: actions/checkout@v3
         with:
           repository: Teahouse-Studios/akari-bot-core
           path: akari-bot-core
-          token: ${{ secrets.GITHUB_TOKEN }}
 
+      # 同步文件和目录
       - name: Sync directories and files
         run: |
           mkdir -p akari-bot-core
@@ -33,33 +35,37 @@ jobs:
           cp akari-bot/bot.py akari-bot-core/
           cp akari-bot/console.py akari-bot-core/
 
+      # 提交更改
       - name: Commit changes
         run: |
           cd akari-bot-core
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
+          # 检查是否有更改，如果没有更改，跳过提交
           if git diff --cached --quiet; then
             echo "No changes detected, skipping commit."
             exit 0
           fi
           git commit -m "Sync from source repository on $(date +'%Y-%m-%d')"
 
+      # 推送更改到新分支
       - name: Push changes to new branch
-        id: push-changes
         run: |
           cd akari-bot-core
           branch_name="sync-$(date +'%Y%m%d')"
           git checkout -b $branch_name
           git push origin $branch_name
-          
+
+      # 创建 Pull Request
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ steps.push-changes.outputs.branch_name }}
           title: "Sync from source repository on $(date +'%Y-%m-%d')"
           body: |
             This pull request contains changes synchronized from the source repository.
             Please review and merge.
-          base: main
+          base: main  # 确保合并到目标仓库的 `main` 分支
+          head: ${{ steps.push-changes.outputs.branch_name }}  # 使用动态分支名称
+          delete-branch: false  # 推送后保留源分支
