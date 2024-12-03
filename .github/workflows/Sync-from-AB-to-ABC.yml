@@ -3,7 +3,8 @@ name: Sync Directories and Files to ABC
 on:
   schedule:
     - cron: '0 0 1 * *'
-
+  workflow_dispatch:
+  
 jobs:
   sync-repo:
     runs-on: ubuntu-latest
