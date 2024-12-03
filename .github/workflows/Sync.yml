@@ -26,7 +26,7 @@ jobs:
       - name: Sync directories and files
         run: |
           mkdir -p akari-bot-core
-          rsync -av --exclude='api/' akari-bot/bots/ akari-bot-core/bots/
+          rsync -av akari-bot/bots/ akari-bot-core/bots/
           rsync -av akari-bot/core/ akari-bot-core/core/
           rsync -av akari-bot/modules/core/ akari-bot-core/modules/core/
           cp akari-bot/schedulers/purge.py akari-bot-core/schedulers/
